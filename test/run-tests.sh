@@ -49,12 +49,12 @@ for scenario in "${SCENARIOS[@]}"; do
 
     if "$BINARY" --scenario "$scenario" > /tmp/politest-output.log 2>&1; then
         echo -e "  ${GREEN}✓ PASS${NC}"
-        ((PASSED++))
+        PASSED=$((PASSED + 1))
     else
         echo -e "  ${RED}✗ FAIL${NC}"
         echo "  Output:"
         sed 's/^/    /' /tmp/politest-output.log
-        ((FAILED++))
+        FAILED=$((FAILED + 1))
     fi
     echo ""
 done
