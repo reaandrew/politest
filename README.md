@@ -172,8 +172,18 @@ Use Go template syntax: `{{ .variable_name }}`
 context:
   - ContextKeyName: "aws:RequestedRegion"
     ContextKeyValues: ["us-east-1", "eu-west-1"]
-    ContextKeyType: "stringList"  # string, stringList, numeric, boolean, ipaddress, etc.
+    ContextKeyType: "stringList"  # string, stringList, numeric, numericList, boolean, booleanList
 ```
+
+**Supported Context Types:**
+- `string` - Single string value
+- `stringList` - List of strings
+- `numeric` - Single numeric value
+- `numericList` - List of numeric values
+- `boolean` - Single boolean value
+- `booleanList` - List of boolean values
+
+**Note:** IpAddress and IpAddressList types are not supported by the AWS SDK.
 
 ### SCP Merging
 
@@ -282,13 +292,64 @@ The tool uses the AWS SDK v2 default credential chain:
 
 Required IAM permission: `iam:SimulateCustomPolicy`
 
+## Development
+
+### Running Tests
+
+```bash
+# Run unit tests (if any exist)
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+# Run integration tests (requires AWS credentials)
+cd test && bash run-tests.sh
+```
+
+Integration tests are located in the `test/` directory and cover:
+- Policy-only allow scenarios
+- Policy allows, SCP denies
+- Policy allows, RCP denies
+- Multiple SCPs merging
+- Explicit deny in policy
+- Template variables
+- Context conditions
+
+### Pre-commit Hooks
+
+This project uses [lefthook](https://github.com/evilmartians/lefthook) for Git hooks:
+
+```bash
+# Install hooks
+lefthook install
+
+# Hooks run automatically on commit:
+# - gofmt -w (auto-format)
+# - go vet (static analysis)
+# - staticcheck (linting)
+# - go test (unit tests)
+# - go mod tidy (dependency cleanup)
+# - trailing whitespace check
+```
+
+### CI/CD
+
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
+- Linting and testing
+- Dependency scanning (Trivy)
+- Secret detection (GitGuardian)
+- Code quality analysis (SonarCloud)
+- Security scanning (Semgrep)
+- Cross-platform builds
+- Integration tests against real AWS API
+- Semantic versioning releases
+
 ## Tips
 
 1. **Organize scenarios**: Use `_common.yml` for shared config, extend in specific tests
 2. **Use templates**: Policy templates with variables make tests reusable across accounts/regions
 3. **CI Integration**: Use `expect:` assertions and check exit codes
-4. **Debug**: Use `--save` to inspect raw AWS responses
+4. **Debug**: Use `--save` to inspect raw AWS responses and examine `MatchedStatements`
 5. **Glob SCPs**: Use wildcards to merge multiple SCP files automatically
+6. **Case-insensitive decisions**: Expected decisions are compared case-insensitively (e.g., "allowed" matches "Allowed")
 
 ## Project Structure Example
 
