@@ -1,0 +1,35 @@
+# Test: Identity + Resource Policy Combined (Cross-Account)
+# Demonstrates how identity policies and resource policies work together
+
+# Alice's identity policy (allows all S3)
+policy_json: "../policies/user-alice-identity.json"
+
+# Bucket's resource policy (allows Alice to read, denies write)
+resource_policy_json: "../policies/s3-bucket-policy-cross-account.json"
+
+# Simulate as Alice from account 111111111111
+caller_arn: "arn:aws:iam::111111111111:user/alice"
+
+# Bucket owned by account 222222222222
+resource_owner: "arn:aws:iam::222222222222:root"
+
+tests:
+  - name: "Alice can read objects (both policies allow)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    expect: "allowed"
+
+  - name: "Alice can list bucket (both policies allow)"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::shared-bucket"
+    expect: "allowed"
+
+  - name: "Alice cannot write objects (resource policy denies)"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    expect: "explicitDeny"
+
+  - name: "Alice cannot delete objects (resource policy denies)"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    expect: "explicitDeny"

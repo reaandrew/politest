@@ -1,0 +1,27 @@
+# Test: Test-level overrides for caller_arn and resource_policy
+# Shows how different tests can simulate different users and resource policies
+
+# Default identity policy
+policy_json: "../policies/user-alice-identity.json"
+
+# Default caller
+caller_arn: "arn:aws:iam::111111111111:user/alice"
+
+tests:
+  - name: "Alice with default bucket policy"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    resource_policy_json: "../policies/s3-bucket-policy-cross-account.json"
+    expect: "allowed"
+
+  - name: "Bob trying same action (override caller)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    caller_arn: "arn:aws:iam::111111111111:user/bob"
+    resource_policy_json: "../policies/s3-bucket-policy-cross-account.json"
+    expect: "allowed"  # Identity policy allows, resource policy doesn't explicitly deny Bob
+
+  - name: "Alice without resource policy (identity only)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::any-bucket/file.txt"
+    expect: "allowed"  # Identity policy allows all S3

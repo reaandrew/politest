@@ -22,26 +22,36 @@ import (
 )
 
 type Scenario struct {
-	Extends        string            `yaml:"extends"`         // optional
-	VarsFile       string            `yaml:"vars_file"`       // optional
-	Vars           map[string]any    `yaml:"vars"`            // optional
-	PolicyTemplate string            `yaml:"policy_template"` // OR
-	PolicyJSON     string            `yaml:"policy_json"`     // mutually exclusive
-	SCPPaths       []string          `yaml:"scp_paths"`       // optional
-	Actions        []string          `yaml:"actions"`         // required if you want to simulate (legacy format)
-	Resources      []string          `yaml:"resources"`       // optional (legacy format)
-	Context        []ContextEntryYml `yaml:"context"`         // optional
-	Expect         map[string]string `yaml:"expect"`          // optional (action -> decision, legacy format)
-	Tests          []TestCase        `yaml:"tests"`           // optional (new collection format)
+	Extends                string            `yaml:"extends"`                  // optional
+	VarsFile               string            `yaml:"vars_file"`                // optional
+	Vars                   map[string]any    `yaml:"vars"`                     // optional
+	PolicyTemplate         string            `yaml:"policy_template"`          // OR
+	PolicyJSON             string            `yaml:"policy_json"`              // mutually exclusive
+	ResourcePolicyTemplate string            `yaml:"resource_policy_template"` // optional resource-based policy template
+	ResourcePolicyJSON     string            `yaml:"resource_policy_json"`     // optional resource-based policy
+	CallerArn              string            `yaml:"caller_arn"`               // optional IAM principal ARN to simulate as
+	ResourceOwner          string            `yaml:"resource_owner"`           // optional account ARN that owns resources
+	ResourceHandlingOption string            `yaml:"resource_handling_option"` // optional EC2 scenario (EC2-VPC-InstanceStore, etc)
+	SCPPaths               []string          `yaml:"scp_paths"`                // optional
+	Actions                []string          `yaml:"actions"`                  // required if you want to simulate (legacy format)
+	Resources              []string          `yaml:"resources"`                // optional (legacy format)
+	Context                []ContextEntryYml `yaml:"context"`                  // optional
+	Expect                 map[string]string `yaml:"expect"`                   // optional (action -> decision, legacy format)
+	Tests                  []TestCase        `yaml:"tests"`                    // optional (new collection format)
 }
 
 type TestCase struct {
-	Name      string            `yaml:"name"`      // descriptive test name
-	Action    string            `yaml:"action"`    // single action to test
-	Resource  string            `yaml:"resource"`  // single resource ARN (optional, can use Resources for multiple)
-	Resources []string          `yaml:"resources"` // multiple resources (alternative to Resource)
-	Context   []ContextEntryYml `yaml:"context"`   // optional context for this specific test
-	Expect    string            `yaml:"expect"`    // expected decision: allowed, explicitDeny, implicitDeny
+	Name                   string            `yaml:"name"`                     // descriptive test name
+	Action                 string            `yaml:"action"`                   // single action to test
+	Resource               string            `yaml:"resource"`                 // single resource ARN (optional, can use Resources for multiple)
+	Resources              []string          `yaml:"resources"`                // multiple resources (alternative to Resource)
+	Context                []ContextEntryYml `yaml:"context"`                  // optional context for this specific test
+	ResourcePolicyTemplate string            `yaml:"resource_policy_template"` // optional resource policy template for this test
+	ResourcePolicyJSON     string            `yaml:"resource_policy_json"`     // optional resource policy for this test
+	CallerArn              string            `yaml:"caller_arn"`               // optional caller ARN override for this test
+	ResourceOwner          string            `yaml:"resource_owner"`           // optional resource owner override for this test
+	ResourceHandlingOption string            `yaml:"resource_handling_option"` // optional EC2 scenario override for this test
+	Expect                 string            `yaml:"expect"`                   // expected decision: allowed, explicitDeny, implicitDeny
 }
 
 type ContextEntryYml struct {
@@ -112,6 +122,23 @@ func main() {
 		pbJSON = toJSONMin(merged)
 	}
 
+	// Resource policy: template or pre-rendered JSON
+	var resourcePolicyJSON string
+	switch {
+	case scen.ResourcePolicyJSON != "" && scen.ResourcePolicyTemplate != "":
+		die("provide only one of 'resource_policy_json' or 'resource_policy_template'")
+	case scen.ResourcePolicyJSON != "":
+		base := filepath.Dir(absScenario)
+		p := mustAbsJoin(base, scen.ResourcePolicyJSON)
+		b, err := os.ReadFile(p)
+		check(err)
+		resourcePolicyJSON = minifyJSON(b)
+	case scen.ResourcePolicyTemplate != "":
+		base := filepath.Dir(absScenario)
+		tplPath := mustAbsJoin(base, scen.ResourcePolicyTemplate)
+		resourcePolicyJSON = renderTemplateFileJSON(tplPath, allVars)
+	}
+
 	// AWS client setup
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	check(err)
@@ -120,16 +147,16 @@ func main() {
 	// Determine format and run tests
 	if len(scen.Tests) > 0 {
 		// New format: collection of named tests
-		runTestCollection(client, scen, policyJSON, pbJSON, allVars, savePath, noAssert)
+		runTestCollection(client, scen, policyJSON, pbJSON, resourcePolicyJSON, absScenario, allVars, savePath, noAssert)
 	} else {
 		// Legacy format: actions + resources + expect map
-		runLegacyFormat(client, scen, policyJSON, pbJSON, allVars, savePath, noAssert)
+		runLegacyFormat(client, scen, policyJSON, pbJSON, resourcePolicyJSON, allVars, savePath, noAssert)
 	}
 }
 
 // ---------- Test runners ----------
 
-func runLegacyFormat(client *iam.Client, scen *Scenario, policyJSON, pbJSON string, allVars map[string]any, savePath string, noAssert bool) {
+func runLegacyFormat(client *iam.Client, scen *Scenario, policyJSON, pbJSON, resourcePolicyJSON string, allVars map[string]any, savePath string, noAssert bool) {
 	// Render actions/resources/context with Go templates
 	actions := renderStringSlice(scen.Actions, allVars)
 	resources := renderStringSlice(scen.Resources, allVars)
@@ -144,6 +171,20 @@ func runLegacyFormat(client *iam.Client, scen *Scenario, policyJSON, pbJSON stri
 	}
 	if pbJSON != "" {
 		input.PermissionsBoundaryPolicyInputList = []string{pbJSON}
+	}
+	if resourcePolicyJSON != "" {
+		input.ResourcePolicy = &resourcePolicyJSON
+	}
+	if scen.CallerArn != "" {
+		rendered := renderString(scen.CallerArn, allVars)
+		input.CallerArn = &rendered
+	}
+	if scen.ResourceOwner != "" {
+		rendered := renderString(scen.ResourceOwner, allVars)
+		input.ResourceOwner = &rendered
+	}
+	if scen.ResourceHandlingOption != "" {
+		input.ResourceHandlingOption = &scen.ResourceHandlingOption
 	}
 
 	resp, err := client.SimulateCustomPolicy(context.Background(), input)
@@ -196,7 +237,7 @@ func runLegacyFormat(client *iam.Client, scen *Scenario, policyJSON, pbJSON stri
 	}
 }
 
-func runTestCollection(client *iam.Client, scen *Scenario, policyJSON, pbJSON string, allVars map[string]any, savePath string, noAssert bool) {
+func runTestCollection(client *iam.Client, scen *Scenario, policyJSON, pbJSON, resourcePolicyJSON, absScenario string, allVars map[string]any, savePath string, noAssert bool) {
 	passCount := 0
 	failCount := 0
 	var allResponses []*iam.SimulateCustomPolicyOutput
@@ -235,6 +276,23 @@ func runTestCollection(client *iam.Client, scen *Scenario, policyJSON, pbJSON st
 			ctxEntries = append(ctxEntries, testCtx...)
 		}
 
+		// Determine resource policy: test-level overrides scenario-level
+		testResourcePolicy := resourcePolicyJSON
+		switch {
+		case test.ResourcePolicyJSON != "" && test.ResourcePolicyTemplate != "":
+			die("test %d: provide only one of 'resource_policy_json' or 'resource_policy_template'", i+1)
+		case test.ResourcePolicyJSON != "":
+			base := filepath.Dir(absScenario)
+			p := mustAbsJoin(base, test.ResourcePolicyJSON)
+			b, err := os.ReadFile(p)
+			check(err)
+			testResourcePolicy = minifyJSON(b)
+		case test.ResourcePolicyTemplate != "":
+			base := filepath.Dir(absScenario)
+			tplPath := mustAbsJoin(base, test.ResourcePolicyTemplate)
+			testResourcePolicy = renderTemplateFileJSON(tplPath, allVars)
+		}
+
 		// AWS call
 		input := &iam.SimulateCustomPolicyInput{
 			PolicyInputList: []string{policyJSON},
@@ -244,6 +302,36 @@ func runTestCollection(client *iam.Client, scen *Scenario, policyJSON, pbJSON st
 		}
 		if pbJSON != "" {
 			input.PermissionsBoundaryPolicyInputList = []string{pbJSON}
+		}
+		if testResourcePolicy != "" {
+			input.ResourcePolicy = &testResourcePolicy
+		}
+
+		// Test-level overrides for caller ARN, resource owner, and handling option
+		callerArn := scen.CallerArn
+		if test.CallerArn != "" {
+			callerArn = test.CallerArn
+		}
+		if callerArn != "" {
+			rendered := renderString(callerArn, allVars)
+			input.CallerArn = &rendered
+		}
+
+		resourceOwner := scen.ResourceOwner
+		if test.ResourceOwner != "" {
+			resourceOwner = test.ResourceOwner
+		}
+		if resourceOwner != "" {
+			rendered := renderString(resourceOwner, allVars)
+			input.ResourceOwner = &rendered
+		}
+
+		resourceHandlingOption := scen.ResourceHandlingOption
+		if test.ResourceHandlingOption != "" {
+			resourceHandlingOption = test.ResourceHandlingOption
+		}
+		if resourceHandlingOption != "" {
+			input.ResourceHandlingOption = &resourceHandlingOption
 		}
 
 		resp, err := client.SimulateCustomPolicy(context.Background(), input)

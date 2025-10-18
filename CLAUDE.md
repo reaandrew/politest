@@ -60,8 +60,8 @@ cd test && bash run-tests.sh
 ├── lefthook.yml               # Pre-commit hooks (fmt, vet, staticcheck, test)
 ├── .github/workflows/ci.yml   # Full CI/CD with semantic-release
 ├── test/
-│   ├── scenarios/*.yml        # 11 integration test scenarios (7 legacy + 4 collection format)
-│   ├── policies/*.json        # Test IAM policies
+│   ├── scenarios/*.yml        # 13 integration test scenarios (7 legacy + 6 collection format)
+│   ├── policies/*.json        # Test IAM policies (identity + resource policies)
 │   ├── scp/*.json             # Service Control Policies
 │   ├── rcp/*.json             # Resource Control Policies
 │   └── run-tests.sh           # Integration test runner
@@ -285,6 +285,62 @@ tests:
 - `booleanList` - Multiple boolean values
 
 **Note:** AWS SimulateCustomPolicy has limitations in condition evaluation. Some complex conditions may not evaluate as expected in simulation.
+
+### Resource Policies and Cross-Account Testing
+
+Test how identity policies and resource policies interact, essential for S3 buckets, KMS keys, SNS/SQS, and other resource-based policies:
+
+```yaml
+# Alice's identity policy
+policy_json: "../policies/user-alice-identity.json"
+
+# S3 bucket's resource policy
+resource_policy_json: "../policies/s3-bucket-policy.json"
+
+# Simulate as Alice from account 111111111111
+caller_arn: "arn:aws:iam::111111111111:user/alice"
+
+# Bucket owned by account 222222222222
+resource_owner: "arn:aws:iam::222222222222:root"
+
+tests:
+  - name: "Cross-account read allowed by both policies"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    expect: "allowed"
+
+  - name: "Write denied by resource policy"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    expect: "explicitDeny"
+```
+
+**Test-level overrides:**
+
+Each test can override scenario-level settings:
+
+```yaml
+caller_arn: "arn:aws:iam::111111111111:user/alice"  # Default
+
+tests:
+  - name: "Test as Alice"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "allowed"
+
+  - name: "Test as Bob (override)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    caller_arn: "arn:aws:iam::111111111111:user/bob"  # Override for this test
+    resource_policy_json: "../policies/different-policy.json"  # Different policy
+    expect: "implicitDeny"
+```
+
+**Supported parameters:**
+- `resource_policy_json` / `resource_policy_template` - Resource-based policy
+- `caller_arn` - IAM principal to simulate as (required when using resource policies)
+- `resource_owner` - Account ARN that owns the resource (for cross-account)
+- `resource_handling_option` - EC2 scenario type (EC2-VPC-InstanceStore, etc.)
 
 ### Using Template Variables
 
