@@ -1,0 +1,30 @@
+# Test: S3 policy using new collection format
+# Demonstrates named test cases with individual expectations
+
+policy_json: "../policies/allow-s3.json"
+
+tests:
+  - name: "GetObject from test-bucket should be allowed"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"
+
+  - name: "PutObject to test-bucket should be allowed"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"
+
+  - name: "ListBucket on test-bucket should be allowed"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::test-bucket"
+    expect: "allowed"
+
+  - name: "DeleteBucket should be denied (not in policy)"
+    action: "s3:DeleteBucket"
+    resource: "arn:aws:s3:::test-bucket"
+    expect: "implicitDeny"
+
+  - name: "GetObject from different-bucket is also allowed (policy uses wildcard)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::different-bucket/*"
+    expect: "allowed"

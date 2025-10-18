@@ -28,10 +28,20 @@ type Scenario struct {
 	PolicyTemplate string            `yaml:"policy_template"` // OR
 	PolicyJSON     string            `yaml:"policy_json"`     // mutually exclusive
 	SCPPaths       []string          `yaml:"scp_paths"`       // optional
-	Actions        []string          `yaml:"actions"`         // required if you want to simulate
-	Resources      []string          `yaml:"resources"`       // optional
+	Actions        []string          `yaml:"actions"`         // required if you want to simulate (legacy format)
+	Resources      []string          `yaml:"resources"`       // optional (legacy format)
 	Context        []ContextEntryYml `yaml:"context"`         // optional
-	Expect         map[string]string `yaml:"expect"`          // optional (action -> decision)
+	Expect         map[string]string `yaml:"expect"`          // optional (action -> decision, legacy format)
+	Tests          []TestCase        `yaml:"tests"`           // optional (new collection format)
+}
+
+type TestCase struct {
+	Name      string            `yaml:"name"`      // descriptive test name
+	Action    string            `yaml:"action"`    // single action to test
+	Resource  string            `yaml:"resource"`  // single resource ARN (optional, can use Resources for multiple)
+	Resources []string          `yaml:"resources"` // multiple resources (alternative to Resource)
+	Context   []ContextEntryYml `yaml:"context"`   // optional context for this specific test
+	Expect    string            `yaml:"expect"`    // expected decision: allowed, explicitDeny, implicitDeny
 }
 
 type ContextEntryYml struct {
@@ -102,16 +112,30 @@ func main() {
 		pbJSON = toJSONMin(merged)
 	}
 
+	// AWS client setup
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	check(err)
+	client := iam.NewFromConfig(cfg)
+
+	// Determine format and run tests
+	if len(scen.Tests) > 0 {
+		// New format: collection of named tests
+		runTestCollection(client, scen, policyJSON, pbJSON, allVars, savePath, noAssert)
+	} else {
+		// Legacy format: actions + resources + expect map
+		runLegacyFormat(client, scen, policyJSON, pbJSON, allVars, savePath, noAssert)
+	}
+}
+
+// ---------- Test runners ----------
+
+func runLegacyFormat(client *iam.Client, scen *Scenario, policyJSON, pbJSON string, allVars map[string]any, savePath string, noAssert bool) {
 	// Render actions/resources/context with Go templates
 	actions := renderStringSlice(scen.Actions, allVars)
 	resources := renderStringSlice(scen.Resources, allVars)
 	ctxEntries := renderContext(scen.Context, allVars)
 
 	// AWS call
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	check(err)
-	client := iam.NewFromConfig(cfg)
-
 	input := &iam.SimulateCustomPolicyInput{
 		PolicyInputList: []string{policyJSON},
 		ActionNames:     actions,
@@ -168,6 +192,107 @@ func main() {
 		for _, f := range failures {
 			fmt.Printf("  - %s: expected %s, got %s\n", f[0], f[1], ifEmpty(f[2], "<missing>"))
 		}
+		os.Exit(2)
+	}
+}
+
+func runTestCollection(client *iam.Client, scen *Scenario, policyJSON, pbJSON string, allVars map[string]any, savePath string, noAssert bool) {
+	passCount := 0
+	failCount := 0
+	var allResponses []*iam.SimulateCustomPolicyOutput
+
+	fmt.Printf("Running %d test(s)...\n\n", len(scen.Tests))
+
+	for i, test := range scen.Tests {
+		fmt.Printf("[%d/%d] %s\n", i+1, len(scen.Tests), test.Name)
+
+		// Determine resources for this test
+		var resources []string
+		if test.Resource != "" {
+			resources = []string{renderString(test.Resource, allVars)}
+		} else if len(test.Resources) > 0 {
+			resources = renderStringSlice(test.Resources, allVars)
+		}
+
+		// Render action
+		action := renderString(test.Action, allVars)
+
+		// Merge context: scenario-level + test-level
+		ctxEntries := renderContext(scen.Context, allVars)
+		if len(test.Context) > 0 {
+			testCtx := renderContext(test.Context, allVars)
+			ctxEntries = append(ctxEntries, testCtx...)
+		}
+
+		// AWS call
+		input := &iam.SimulateCustomPolicyInput{
+			PolicyInputList: []string{policyJSON},
+			ActionNames:     []string{action},
+			ResourceArns:    resources,
+			ContextEntries:  ctxEntries,
+		}
+		if pbJSON != "" {
+			input.PermissionsBoundaryPolicyInputList = []string{pbJSON}
+		}
+
+		resp, err := client.SimulateCustomPolicy(context.Background(), input)
+		check(err)
+		allResponses = append(allResponses, resp)
+
+		// Check result
+		if len(resp.EvaluationResults) == 0 {
+			fmt.Printf("  ✗ FAIL: no evaluation results returned\n\n")
+			failCount++
+			continue
+		}
+
+		result := resp.EvaluationResults[0]
+		decision := string(result.EvalDecision)
+
+		// Get matched statements for details
+		detail := "-"
+		if len(result.MatchedStatements) > 0 {
+			parts := make([]string, 0, len(result.MatchedStatements))
+			for _, m := range result.MatchedStatements {
+				if m.SourcePolicyId != nil {
+					parts = append(parts, awsString(m.SourcePolicyId))
+				}
+			}
+			if len(parts) > 0 {
+				detail = strings.Join(parts, ",")
+			}
+		}
+
+		// Check expectation
+		if test.Expect != "" {
+			if strings.EqualFold(decision, test.Expect) {
+				fmt.Printf("  ✓ PASS: %s (matched: %s)\n\n", decision, detail)
+				passCount++
+			} else {
+				fmt.Printf("  ✗ FAIL: expected %s, got %s (matched: %s)\n\n", test.Expect, decision, detail)
+				failCount++
+			}
+		} else {
+			// No expectation, just show result
+			fmt.Printf("  → Result: %s (matched: %s)\n\n", decision, detail)
+			passCount++
+		}
+	}
+
+	// Summary
+	fmt.Printf("========================================\n")
+	fmt.Printf("Test Results: %d passed, %d failed\n", passCount, failCount)
+	fmt.Printf("========================================\n")
+
+	// Save raw JSON if requested
+	if savePath != "" {
+		b, _ := json.MarshalIndent(allResponses, "", "  ")
+		check(os.WriteFile(savePath, b, 0o644))
+		fmt.Printf("\nSaved raw responses → %s\n", savePath)
+	}
+
+	// Exit with error if any failures and not no-assert
+	if failCount > 0 && !noAssert {
 		os.Exit(2)
 	}
 }
@@ -269,6 +394,10 @@ func renderTemplateString(s string, vars map[string]any) string {
 	var buf bytes.Buffer
 	check(tpl.Execute(&buf, vars))
 	return buf.String()
+}
+
+func renderString(s string, vars map[string]any) string {
+	return renderTemplateString(s, vars)
 }
 
 func renderContext(in []ContextEntryYml, vars map[string]any) []iamtypes.ContextEntry {

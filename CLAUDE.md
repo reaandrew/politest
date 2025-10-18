@@ -27,12 +27,13 @@ cd test && bash run-tests.sh
 
 ### Core Concepts
 
-1. **Scenarios** (`Scenario` struct in main.go:24-35)
-   - YAML files defining policy tests
+1. **Scenarios** (`Scenario` struct in main.go:24-45)
+   - YAML files defining policy tests in two formats:
+     - **Legacy format**: Uses `actions`, `resources`, and `expect` map
+     - **Collection format**: Uses `tests` array with named test cases
    - Support `extends:` for inheritance (recursive merging)
    - Can reference `policy_template` (Go template) or `policy_json` (pre-rendered)
-   - Include `actions`, `resources`, `context` for simulation
-   - Define `expect` map for assertions (action → decision)
+   - Both formats support template variables and SCP/RCP merging
 
 2. **Variable Templating**
    - Go `text/template` for all fields: policies, actions, resources, context values
@@ -59,7 +60,7 @@ cd test && bash run-tests.sh
 ├── lefthook.yml               # Pre-commit hooks (fmt, vet, staticcheck, test)
 ├── .github/workflows/ci.yml   # Full CI/CD with semantic-release
 ├── test/
-│   ├── scenarios/*.yml        # 7 integration test scenarios
+│   ├── scenarios/*.yml        # 9 integration test scenarios (7 legacy + 2 collection format)
 │   ├── policies/*.json        # Test IAM policies
 │   ├── scp/*.json             # Service Control Policies
 │   ├── rcp/*.json             # Resource Control Policies
@@ -169,18 +170,52 @@ Install hooks: `lefthook install`
 
 ### Adding a New Test Scenario
 
-1. Create YAML in `test/scenarios/`:
+**Legacy Format** (backwards compatible):
 ```yaml
 policy_json: "../policies/my-policy.json"
 scp_paths:
   - "../scp/permissive.json"
 actions:
   - "s3:GetObject"
+  - "s3:PutObject"
+resources:
+  - "arn:aws:s3:::test-bucket/*"
 expect:
   "s3:GetObject": "allowed"
+  "s3:PutObject": "allowed"
 ```
 
-2. Run: `cd test && bash run-tests.sh`
+**Collection Format** (recommended for new scenarios):
+```yaml
+policy_json: "../policies/my-policy.json"
+scp_paths:
+  - "../scp/permissive.json"
+
+tests:
+  - name: "GetObject should be allowed"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"
+
+  - name: "PutObject should be allowed"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"
+
+  - name: "DeleteBucket should be denied"
+    action: "s3:DeleteBucket"
+    resource: "arn:aws:s3:::test-bucket"
+    expect: "implicitDeny"
+```
+
+**Key differences:**
+- Collection format provides descriptive test names
+- Each test can have different resources
+- Tests can have individual context conditions
+- Better output showing which specific test failed
+- Easier to understand test intent
+
+Run tests: `cd test && bash run-tests.sh`
 
 ### Using Template Variables
 
