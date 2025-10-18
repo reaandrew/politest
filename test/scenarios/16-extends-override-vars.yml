@@ -1,0 +1,12 @@
+# Child scenario: Inherits base and overrides specific variables
+# Demonstrates variable override and inline vars merging
+
+extends: "14-base-with-variables.yml"
+
+# Override department inline (merges with vars_file)
+vars:
+  department: "Finance"
+  bucket_name: "finance-data"
+
+# All tests inherited from base, but now test Finance department access
+# The parent tests are automatically re-run with new variable values

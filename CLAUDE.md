@@ -60,8 +60,9 @@ cd test && bash run-tests.sh
 ├── lefthook.yml               # Pre-commit hooks (fmt, vet, staticcheck, test)
 ├── .github/workflows/ci.yml   # Full CI/CD with semantic-release
 ├── test/
-│   ├── scenarios/*.yml        # 13 integration test scenarios (7 legacy + 6 collection format)
-│   ├── policies/*.json        # Test IAM policies (identity + resource policies)
+│   ├── scenarios/*.yml        # 18 integration test scenarios
+│   ├── policies/*.json        # Test IAM policies (identity + resource policies + templates)
+│   ├── vars/*.yml             # Variable files for template rendering
 │   ├── scp/*.json             # Service Control Policies
 │   ├── rcp/*.json             # Resource Control Policies
 │   └── run-tests.sh           # Integration test runner
@@ -116,13 +117,13 @@ Requirements:
 - IAM permission: `iam:SimulateCustomPolicy`
 
 Test scenarios cover:
-1. Policy-only allow
-2. Policy allows, SCP denies
-3. Policy allows, RCP denies
-4. Multiple SCPs merging
-5. Explicit deny in policy
-6. Template variables
-7. Context conditions
+1. **01-07**: Legacy format - Basic policy evaluation, SCPs, RCPs, explicit denies
+2. **08-09**: Collection format - Named tests with SCPs
+3. **10-11**: Context conditions - IP, MFA, tags, stringList
+4. **12-13**: Resource policies - Cross-account access, test-level overrides
+5. **14-16**: Variable templating - vars_file, extends:, variable overrides
+6. **17**: RCP in collection format
+7. **18**: Comprehensive - All features combined (inheritance, templates, resource policies, SCPs, cross-account)
 
 ### Unit Tests
 
@@ -344,19 +345,106 @@ tests:
 
 ### Using Template Variables
 
-Create `vars.yml`:
+politest supports Go template rendering across all fields - policies, actions, resources, context values, and ARNs.
+
+**Create a variable file** (`vars/common-vars.yml`):
 ```yaml
-bucket_name: my-bucket
-region: us-east-1
+account_id: "123456789012"
+bucket_name: "my-app-data"
+department: "Engineering"
+region: "us-east-1"
 ```
 
-Reference in scenario:
-```yaml
-vars_file: "vars.yml"
-policy_template: "policy.json.tpl"
-resources:
-  - "arn:aws:s3:::{{.bucket_name}}/*"
+**Create a policy template** (`policies/policy.json.tpl`):
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["s3:GetObject", "s3:PutObject"],
+    "Resource": "arn:aws:s3:::{{.bucket_name}}/*",
+    "Condition": {
+      "StringEquals": {
+        "aws:PrincipalTag/Department": "{{.department}}"
+      }
+    }
+  }]
+}
 ```
+
+**Reference in scenario:**
+```yaml
+vars_file: "../vars/common-vars.yml"
+policy_template: "../policies/policy.json.tpl"
+caller_arn: "arn:aws:iam::{{.account_id}}:user/alice"
+
+tests:
+  - name: "GetObject with correct tags"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/data.txt"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["{{.department}}"]
+    expect: "allowed"
+```
+
+### Scenario Inheritance with extends:
+
+Reuse base scenarios and override specific settings:
+
+**Base scenario** (`scenarios/14-base-with-variables.yml`):
+```yaml
+vars_file: "../vars/common-vars.yml"
+policy_template: "../policies/s3-templated.json.tpl"
+caller_arn: "arn:aws:iam::{{.account_id}}:user/alice"
+
+tests:
+  - name: "GetObject allowed"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/*"
+    expect: "allowed"
+```
+
+**Child scenario with SCP** (`scenarios/15-extends-add-scp.yml`):
+```yaml
+extends: "14-base-with-variables.yml"
+
+# Add organizational SCP boundary
+scp_paths:
+  - "../scp/deny-s3-write.json"
+
+# Override expectations - writes now denied
+tests:
+  - name: "GetObject still allowed"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/*"
+    expect: "allowed"
+
+  - name: "PutObject denied by SCP"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/*"
+    expect: "explicitDeny"
+```
+
+**Child scenario with variable override** (`scenarios/16-extends-override-vars.yml`):
+```yaml
+extends: "14-base-with-variables.yml"
+
+# Override specific variables (merges with vars_file)
+vars:
+  department: "Finance"
+  bucket_name: "finance-data"
+
+# Tests from parent are re-run with new variable values
+```
+
+**Inheritance behavior:**
+- Maps (`vars`, `expect`) are **deep-merged** (child adds/overrides keys)
+- Arrays (`actions`, `resources`, `scp_paths`, `tests`) are **replaced entirely**
+- `policy_template` and `policy_json` are mutually exclusive
+- Child variables override parent variables
+- Supports recursive inheritance (child extends child extends base)
 
 ### Debugging Policy Evaluation
 

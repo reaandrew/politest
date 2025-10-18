@@ -1,0 +1,34 @@
+# Test: RCP (Resource Control Policy) in collection format
+# Demonstrates how RCPs can restrict permissions on specific resources
+
+policy_json: "../policies/allow-s3.json"
+
+# RCP that denies access to production resources
+scp_paths:
+  - "../rcp/deny-production-resources.json"
+
+tests:
+  - name: "GetObject allowed on dev bucket (RCP allows)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::dev-bucket/data.txt"
+    expect: "allowed"
+
+  - name: "PutObject allowed on dev bucket (RCP allows)"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::dev-bucket/upload.txt"
+    expect: "allowed"
+
+  - name: "GetObject denied on production bucket (RCP denies)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::production-bucket/data.txt"
+    expect: "explicitDeny"
+
+  - name: "PutObject denied on production bucket (RCP denies)"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::production-bucket/upload.txt"
+    expect: "explicitDeny"
+
+  - name: "ListBucket denied on production bucket (RCP denies)"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::production-bucket"
+    expect: "explicitDeny"

@@ -1,0 +1,9 @@
+# Common variables for template rendering examples
+# Used to demonstrate vars_file: functionality
+
+account_id: "123456789012"
+region: "us-east-1"
+environment: "production"
+bucket_name: "my-app-data"
+department: "Engineering"
+project_name: "politest-demo"

@@ -1,0 +1,46 @@
+# Child scenario: Inherits base scenario and adds SCP boundary
+# Demonstrates extends: feature with organizational policy constraints
+
+extends: "14-base-with-variables.yml"
+
+# Add SCP that denies S3 writes
+scp_paths:
+  - "../scp/deny-s3-write.json"
+
+# Override expectations - writes now denied by SCP
+tests:
+  - name: "GetObject still allowed (SCP allows reads)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/data.txt"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["{{.department}}"]
+    expect: "allowed"
+
+  - name: "PutObject now denied by SCP"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/upload.txt"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["{{.department}}"]
+    expect: "explicitDeny"
+
+  - name: "ListBucket still allowed (SCP allows reads)"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::{{.bucket_name}}"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["{{.department}}"]
+    expect: "allowed"
+
+  - name: "DeleteObject denied by SCP (also not in policy)"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/data.txt"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["{{.department}}"]
+    expect: "explicitDeny"

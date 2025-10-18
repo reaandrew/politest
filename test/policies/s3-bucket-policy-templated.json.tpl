@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowCrossAccountRead",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "{{.alice_arn}}"
+      },
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::{{.shared_bucket}}",
+        "arn:aws:s3:::{{.shared_bucket}}/{{.data_prefix}}/*"
+      ]
+    },
+    {
+      "Sid": "DenyCrossAccountWrite",
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "{{.alice_arn}}"
+      },
+      "Action": [
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::{{.shared_bucket}}/*"
+    }
+  ]
+}

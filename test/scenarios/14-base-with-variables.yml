@@ -1,0 +1,46 @@
+# Base scenario: Template rendering with variables
+# Demonstrates vars_file and policy_template usage
+# This serves as a reusable base for child scenarios
+
+vars_file: "../vars/common-vars.yml"
+policy_template: "../policies/s3-templated.json.tpl"
+
+# Default caller
+caller_arn: "arn:aws:iam::{{.account_id}}:user/alice"
+
+tests:
+  - name: "GetObject allowed with correct department tag"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/data.txt"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["{{.department}}"]
+    expect: "allowed"
+
+  - name: "PutObject allowed with correct department tag"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/upload.txt"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["{{.department}}"]
+    expect: "allowed"
+
+  - name: "ListBucket allowed with correct department tag"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::{{.bucket_name}}"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["{{.department}}"]
+    expect: "allowed"
+
+  - name: "DeleteObject denied (not in policy)"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/data.txt"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["{{.department}}"]
+    expect: "implicitDeny"

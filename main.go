@@ -453,6 +453,9 @@ func mergeScenario(a, b Scenario) Scenario {
 	if len(b.Context) > 0 {
 		out.Context = b.Context
 	}
+	if len(b.Tests) > 0 {
+		out.Tests = b.Tests
+	}
 	if len(b.Expect) > 0 {
 		if out.Expect == nil {
 			out.Expect = map[string]string{}
@@ -466,6 +469,24 @@ func mergeScenario(a, b Scenario) Scenario {
 	}
 	for k, v := range b.Vars {
 		out.Vars[k] = v
+	}
+	// Resource policy fields
+	if b.ResourcePolicyTemplate != "" {
+		out.ResourcePolicyTemplate = b.ResourcePolicyTemplate
+		out.ResourcePolicyJSON = ""
+	}
+	if b.ResourcePolicyJSON != "" {
+		out.ResourcePolicyJSON = b.ResourcePolicyJSON
+		out.ResourcePolicyTemplate = ""
+	}
+	if b.CallerArn != "" {
+		out.CallerArn = b.CallerArn
+	}
+	if b.ResourceOwner != "" {
+		out.ResourceOwner = b.ResourceOwner
+	}
+	if b.ResourceHandlingOption != "" {
+		out.ResourceHandlingOption = b.ResourceHandlingOption
 	}
 	return out
 }

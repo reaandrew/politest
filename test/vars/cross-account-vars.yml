@@ -1,0 +1,14 @@
+# Cross-account scenario variables
+# Used for comprehensive resource policy testing
+
+# Source account (where Alice lives)
+source_account: "111111111111"
+alice_arn: "arn:aws:iam::111111111111:user/alice"
+
+# Target account (where bucket lives)
+target_account: "222222222222"
+target_account_root: "arn:aws:iam::222222222222:root"
+
+# Shared resources
+shared_bucket: "shared-bucket"
+data_prefix: "data"

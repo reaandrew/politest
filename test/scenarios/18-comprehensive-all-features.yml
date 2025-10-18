@@ -1,0 +1,66 @@
+# Comprehensive example: Combines ALL features
+# - Variable files and template rendering
+# - Resource policies with templates
+# - Cross-account testing (caller_arn, resource_owner)
+# - SCPs for organizational boundaries
+# - Context conditions
+# - Named and unnamed tests
+
+vars_file: "../vars/cross-account-vars.yml"
+
+# Alice's identity policy allows all S3
+policy_json: "../policies/user-alice-identity.json"
+
+# Bucket's resource policy (templated)
+resource_policy_template: "../policies/s3-bucket-policy-templated.json.tpl"
+
+# Simulate as Alice from source account
+caller_arn: "{{.alice_arn}}"
+
+# Bucket owned by target account
+resource_owner: "{{.target_account_root}}"
+
+# Add organizational SCP that denies S3 delete globally
+scp_paths:
+  - "../scp/deny-s3-delete.json"
+
+tests:
+  - name: "Alice can read from allowed prefix (identity + resource policy allow)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.shared_bucket}}/{{.data_prefix}}/file.txt"
+    expect: "allowed"
+
+  - name: "Alice can list bucket (both policies allow)"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::{{.shared_bucket}}"
+    expect: "allowed"
+
+  - name: "Alice cannot write objects (resource policy denies)"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::{{.shared_bucket}}/{{.data_prefix}}/upload.txt"
+    expect: "explicitDeny"
+
+  - name: "Alice cannot delete objects (resource policy denies + SCP denies)"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::{{.shared_bucket}}/{{.data_prefix}}/file.txt"
+    expect: "explicitDeny"
+
+  - name: "Alice cannot read from different prefix (resource policy restricts path)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.shared_bucket}}/other-prefix/file.txt"
+    expect: "implicitDeny"
+
+  # Demonstrate context conditions in cross-account scenario
+  - name: "Read with IP restriction (adding inline var)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.shared_bucket}}/{{.data_prefix}}/secure.txt"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["10.0.1.100"]
+    expect: "allowed"
+
+  # Unnamed test using auto-generated name
+  - action: "s3:GetBucketPolicy"
+    resource: "arn:aws:s3:::{{.shared_bucket}}"
+    expect: "implicitDeny"
