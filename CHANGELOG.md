@@ -1,3 +1,12 @@
+## [1.1.0](https://github.com/reaandrew/politest/compare/v1.0.0...v1.1.0) (2025-10-18)
+
+### Features
+
+* add comprehensive test examples demonstrating all features ([2d67e9f](https://github.com/reaandrew/politest/commit/2d67e9ff5f6766b98ce58ea63160a3a6c7dc1678))
+* add resource policy and cross-account testing support ([e2bdfef](https://github.com/reaandrew/politest/commit/e2bdfef301353d95f92c4bcbaca57fb0f68d9e95))
+* add test collection format with named test cases ([8e9ffde](https://github.com/reaandrew/politest/commit/8e9ffde812dc12218debb41d90f831e32a2e5ccd))
+* optional test names, context examples, and logo in README ([c2c39e1](https://github.com/reaandrew/politest/commit/c2c39e14b6f8a5d0147c219ae1c78f6b6f2e5cbe))
+
 ## 1.0.0 (2025-10-18)
 
 ### Features
