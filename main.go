@@ -301,12 +301,7 @@ func parseContextType(t string) iamtypes.ContextKeyTypeEnum {
 		return iamtypes.ContextKeyTypeEnumBoolean
 	case "booleanlist":
 		return iamtypes.ContextKeyTypeEnumBooleanList
-	case "ipaddress":
-		return iamtypes.ContextKeyTypeEnumIpAddress
-	case "ipaddresslist":
-		return iamtypes.ContextKeyTypeEnumIpAddressList
 	default:
-		// default to string; IAM will error if mismatched
 		return iamtypes.ContextKeyTypeEnumString
 	}
 }
