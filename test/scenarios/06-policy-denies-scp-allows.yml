@@ -1,0 +1,18 @@
+# Test: Policy doesn't grant S3, but SCP would allow it
+# Expected: implicitDeny (policy must grant, SCP only limits)
+
+policy_json: "../policies/allow-ec2.json"
+
+scp_paths:
+  - "../scp/permissive.json"
+
+actions:
+  - "s3:GetObject"
+  - "s3:PutObject"
+
+resources:
+  - "arn:aws:s3:::test-bucket/*"
+
+expect:
+  "s3:GetObject": "implicitDeny"
+  "s3:PutObject": "implicitDeny"

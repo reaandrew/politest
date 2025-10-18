@@ -1,0 +1,19 @@
+# Test: Policy has explicit Deny for delete actions
+# Expected: Delete actions explicitDeny, read actions allowed
+
+policy_json: "../policies/deny-s3-delete.json"
+
+actions:
+  - "s3:GetObject"
+  - "s3:ListBucket"
+  - "s3:DeleteObject"
+  - "s3:DeleteBucket"
+
+resources:
+  - "arn:aws:s3:::test-bucket/*"
+
+expect:
+  "s3:GetObject": "allowed"
+  "s3:ListBucket": "allowed"
+  "s3:DeleteObject": "explicitDeny"
+  "s3:DeleteBucket": "explicitDeny"

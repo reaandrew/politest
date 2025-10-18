@@ -1,0 +1,21 @@
+# Test: Policy allows EC2, SCP denies S3 (shouldn't affect EC2)
+# Expected: EC2 actions allowed
+
+policy_json: "../policies/allow-ec2.json"
+
+scp_paths:
+  - "../scp/permissive.json"
+  - "../scp/deny-s3.json"
+
+actions:
+  - "ec2:DescribeInstances"
+  - "ec2:StartInstances"
+  - "ec2:StopInstances"
+
+resources:
+  - "*"
+
+expect:
+  "ec2:DescribeInstances": "allowed"
+  "ec2:StartInstances": "allowed"
+  "ec2:StopInstances": "allowed"

@@ -1,0 +1,21 @@
+# Test: Policy allows DynamoDB, but RCP denies all DynamoDB
+# Expected: All DynamoDB actions implicitDeny (RCP blocks)
+# Note: RCPs are passed as PermissionsBoundaryPolicyInputList in the code
+
+policy_json: "../policies/allow-dynamodb.json"
+
+scp_paths:
+  - "../rcp/deny-dynamodb.json"
+
+actions:
+  - "dynamodb:GetItem"
+  - "dynamodb:PutItem"
+  - "dynamodb:Query"
+
+resources:
+  - "*"
+
+expect:
+  "dynamodb:GetItem": "implicitDeny"
+  "dynamodb:PutItem": "implicitDeny"
+  "dynamodb:Query": "implicitDeny"
