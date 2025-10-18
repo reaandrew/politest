@@ -159,7 +159,7 @@ func main() {
 	failures := [][3]string{}
 	for action, want := range scen.Expect {
 		got := evals[action]
-		if strings.ToLower(got) != strings.ToLower(want) {
+		if !strings.EqualFold(got, want) {
 			failures = append(failures, [3]string{action, want, got})
 		}
 	}
