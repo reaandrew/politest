@@ -22,16 +22,16 @@ import (
 )
 
 type Scenario struct {
-	Extends        string            `yaml:"extends"`          // optional
-	VarsFile       string            `yaml:"vars_file"`        // optional
-	Vars           map[string]any    `yaml:"vars"`             // optional
-	PolicyTemplate string            `yaml:"policy_template"`  // OR
-	PolicyJSON     string            `yaml:"policy_json"`      // mutually exclusive
-	SCPPaths       []string          `yaml:"scp_paths"`        // optional
-	Actions        []string          `yaml:"actions"`          // required if you want to simulate
-	Resources      []string          `yaml:"resources"`        // optional
-	Context        []ContextEntryYml `yaml:"context"`          // optional
-	Expect         map[string]string `yaml:"expect"`           // optional (action -> decision)
+	Extends        string            `yaml:"extends"`         // optional
+	VarsFile       string            `yaml:"vars_file"`       // optional
+	Vars           map[string]any    `yaml:"vars"`            // optional
+	PolicyTemplate string            `yaml:"policy_template"` // OR
+	PolicyJSON     string            `yaml:"policy_json"`     // mutually exclusive
+	SCPPaths       []string          `yaml:"scp_paths"`       // optional
+	Actions        []string          `yaml:"actions"`         // required if you want to simulate
+	Resources      []string          `yaml:"resources"`       // optional
+	Context        []ContextEntryYml `yaml:"context"`         // optional
+	Expect         map[string]string `yaml:"expect"`          // optional (action -> decision)
 }
 
 type ContextEntryYml struct {
