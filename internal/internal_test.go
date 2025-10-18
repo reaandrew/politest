@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"context"
@@ -104,7 +104,7 @@ func TestMergeScenario(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := mergeScenario(tt.parent, tt.child)
+			result := MergeScenario(tt.parent, tt.child)
 
 			// Check Vars
 			if len(tt.expected.Vars) > 0 {
@@ -180,9 +180,9 @@ func TestRenderString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := renderString(tt.template, tt.vars)
+			got := RenderString(tt.template, tt.vars)
 			if got != tt.want {
-				t.Errorf("renderString() = %v, want %v", got, tt.want)
+				t.Errorf("RenderString() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -228,9 +228,9 @@ func TestParseContextType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseContextType(tt.input)
+			got := ParseContextType(tt.input)
 			if got != tt.want {
-				t.Errorf("parseContextType() = %v, want %v", got, tt.want)
+				t.Errorf("ParseContextType() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -282,9 +282,9 @@ func TestExpandGlobsRelative(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := expandGlobsRelative(tt.base, tt.patterns)
+			got := ExpandGlobsRelative(tt.base, tt.patterns)
 			if len(got) != tt.wantLen {
-				t.Errorf("expandGlobsRelative() returned %v files, want %v", len(got), tt.wantLen)
+				t.Errorf("ExpandGlobsRelative() returned %v files, want %v", len(got), tt.wantLen)
 			}
 		})
 	}
@@ -315,9 +315,9 @@ func TestMinifyJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := minifyJSON(tt.input)
+			got := MinifyJSON(tt.input)
 			if got != tt.want {
-				t.Errorf("minifyJSON() = %v, want %v", got, tt.want)
+				t.Errorf("MinifyJSON() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -339,20 +339,20 @@ actions:
 		}
 
 		var result Scenario
-		err := loadYAML(file, &result)
+		err := LoadYAML(file, &result)
 		if err != nil {
-			t.Errorf("loadYAML() error = %v", err)
+			t.Errorf("LoadYAML() error = %v", err)
 		}
 		if result.Vars["bucket"] != "test-bucket" {
-			t.Errorf("loadYAML() Vars[bucket] = %v, want test-bucket", result.Vars["bucket"])
+			t.Errorf("LoadYAML() Vars[bucket] = %v, want test-bucket", result.Vars["bucket"])
 		}
 	})
 
 	t.Run("file not found", func(t *testing.T) {
 		var result Scenario
-		err := loadYAML(filepath.Join(tmpDir, "nonexistent.yml"), &result)
+		err := LoadYAML(filepath.Join(tmpDir, "nonexistent.yml"), &result)
 		if err == nil {
-			t.Error("loadYAML() expected error for nonexistent file, got nil")
+			t.Error("LoadYAML() expected error for nonexistent file, got nil")
 		}
 	})
 }
@@ -387,14 +387,14 @@ func TestRenderStringSlice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := renderStringSlice(tt.input, vars)
+			got := RenderStringSlice(tt.input, vars)
 			if len(got) != len(tt.want) {
-				t.Errorf("renderStringSlice() length = %v, want %v", len(got), len(tt.want))
+				t.Errorf("RenderStringSlice() length = %v, want %v", len(got), len(tt.want))
 				return
 			}
 			for i := range tt.want {
 				if got[i] != tt.want[i] {
-					t.Errorf("renderStringSlice()[%d] = %v, want %v", i, got[i], tt.want[i])
+					t.Errorf("RenderStringSlice()[%d] = %v, want %v", i, got[i], tt.want[i])
 				}
 			}
 		})
@@ -411,10 +411,10 @@ func TestRenderContext(t *testing.T) {
 		{ContextKeyName: "aws:userid", ContextKeyValues: []string{"12345"}, ContextKeyType: "string"},
 	}
 
-	result := renderContext(ctx, vars)
+	result := RenderContext(ctx, vars)
 
 	if len(result) != 2 {
-		t.Errorf("renderContext() returned %v entries, want 2", len(result))
+		t.Errorf("RenderContext() returned %v entries, want 2", len(result))
 	}
 
 	// Check that variables were rendered
@@ -427,7 +427,7 @@ func TestRenderContext(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("renderContext() did not render variable correctly")
+		t.Error("RenderContext() did not render variable correctly")
 	}
 }
 
@@ -457,11 +457,11 @@ func TestMergeSCPFiles(t *testing.T) {
 	}
 
 	paths := []string{scp1, scp2}
-	result := mergeSCPFiles(paths)
+	result := MergeSCPFiles(paths)
 
 	statements := result["Statement"].([]any)
 	if len(statements) != 2 {
-		t.Errorf("mergeSCPFiles() merged %v statements, want 2", len(statements))
+		t.Errorf("MergeSCPFiles() merged %v statements, want 2", len(statements))
 	}
 }
 
@@ -476,20 +476,20 @@ func TestReadJSONFile(t *testing.T) {
 		}
 
 		var result map[string]any
-		err := readJSONFile(file, &result)
+		err := ReadJSONFile(file, &result)
 		if err != nil {
-			t.Errorf("readJSONFile() error = %v", err)
+			t.Errorf("ReadJSONFile() error = %v", err)
 		}
 		if result["key"] != "value" {
-			t.Errorf("readJSONFile() key = %v, want value", result["key"])
+			t.Errorf("ReadJSONFile() key = %v, want value", result["key"])
 		}
 	})
 
 	t.Run("file not found", func(t *testing.T) {
 		var result map[string]any
-		err := readJSONFile(filepath.Join(tmpDir, "nonexistent.json"), &result)
+		err := ReadJSONFile(filepath.Join(tmpDir, "nonexistent.json"), &result)
 		if err == nil {
-			t.Error("readJSONFile() expected error for nonexistent file, got nil")
+			t.Error("ReadJSONFile() expected error for nonexistent file, got nil")
 		}
 	})
 }
@@ -511,11 +511,11 @@ func TestToJSONMin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := toJSONMin(tt.input)
+			result := ToJSONMin(tt.input)
 			// Verify it's valid JSON
 			var parsed map[string]any
 			if err := json.Unmarshal([]byte(result), &parsed); err != nil {
-				t.Errorf("toJSONMin() produced invalid JSON: %v", err)
+				t.Errorf("ToJSONMin() produced invalid JSON: %v", err)
 			}
 		})
 	}
@@ -529,7 +529,7 @@ func TestAwsString(t *testing.T) {
 	}{
 		{
 			name:  "non-nil string",
-			input: strPtr("test"),
+			input: StrPtr("test"),
 			want:  "test",
 		},
 		{
@@ -541,9 +541,9 @@ func TestAwsString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := awsString(tt.input)
+			got := AwsString(tt.input)
 			if got != tt.want {
-				t.Errorf("awsString() = %v, want %v", got, tt.want)
+				t.Errorf("AwsString() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -572,9 +572,9 @@ func TestIfEmpty(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ifEmpty(tt.s, tt.fallback)
+			got := IfEmpty(tt.s, tt.fallback)
 			if got != tt.want {
-				t.Errorf("ifEmpty() = %v, want %v", got, tt.want)
+				t.Errorf("IfEmpty() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -582,13 +582,13 @@ func TestIfEmpty(t *testing.T) {
 
 func TestStrPtr(t *testing.T) {
 	s := "test"
-	ptr := strPtr(s)
+	ptr := StrPtr(s)
 	if ptr == nil {
-		t.Fatal("strPtr() returned nil")
+		t.Fatal("StrPtr() returned nil")
 		return
 	}
 	if *ptr != s {
-		t.Errorf("strPtr() = %v, want %v", *ptr, s)
+		t.Errorf("StrPtr() = %v, want %v", *ptr, s)
 	}
 }
 
@@ -619,9 +619,9 @@ vars:
 		t.Fatal(err)
 	}
 
-	result, err := loadScenarioWithExtends(childFile)
+	result, err := LoadScenarioWithExtends(childFile)
 	if err != nil {
-		t.Fatalf("loadScenarioWithExtends() error = %v", err)
+		t.Fatalf("LoadScenarioWithExtends() error = %v", err)
 	}
 
 	// Check merged vars
@@ -659,17 +659,17 @@ func TestRenderTemplateFileJSON(t *testing.T) {
 		"bucket": "test-bucket",
 	}
 
-	result := renderTemplateFileJSON(templateFile, vars)
+	result := RenderTemplateFileJSON(templateFile, vars)
 
 	// Verify it's valid JSON
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
-		t.Errorf("renderTemplateFileJSON() produced invalid JSON: %v", err)
+		t.Errorf("RenderTemplateFileJSON() produced invalid JSON: %v", err)
 	}
 
 	// Verify variable was rendered
 	if !contains(result, "test-bucket") {
-		t.Error("renderTemplateFileJSON() did not render variable")
+		t.Error("RenderTemplateFileJSON() did not render variable")
 	}
 }
 
@@ -679,14 +679,14 @@ func contains(s, substr string) bool {
 
 func TestMustAbs(t *testing.T) {
 	// Test with current directory
-	result := mustAbs(".")
+	result := MustAbs(".")
 	if result == "" {
-		t.Error("mustAbs() returned empty string")
+		t.Error("MustAbs() returned empty string")
 	}
 
 	// Should return absolute path
 	if !filepath.IsAbs(result) {
-		t.Errorf("mustAbs() returned relative path: %v", result)
+		t.Errorf("MustAbs() returned relative path: %v", result)
 	}
 }
 
@@ -694,14 +694,14 @@ func TestMustAbsJoin(t *testing.T) {
 	base := "/tmp"
 	rel := "subdir/file.txt"
 
-	result := mustAbsJoin(base, rel)
+	result := MustAbsJoin(base, rel)
 
 	if !filepath.IsAbs(result) {
-		t.Errorf("mustAbsJoin() returned relative path: %v", result)
+		t.Errorf("MustAbsJoin() returned relative path: %v", result)
 	}
 
 	if !contains(result, "subdir") {
-		t.Error("mustAbsJoin() did not join paths correctly")
+		t.Error("MustAbsJoin() did not join paths correctly")
 	}
 }
 
@@ -796,13 +796,13 @@ func TestPrintTable(t *testing.T) {
 	}
 
 	// Just call it to ensure no panic
-	printTable(rows)
+	PrintTable(rows)
 }
 
 func TestCheck(t *testing.T) {
-	// check() calls die() on error, which exits the program
+	// Check() calls Die() on error, which exits the program
 	// We can only test the nil case
-	check(nil)
+	Check(nil)
 
 	// If we get here, it worked correctly
 }
@@ -865,7 +865,7 @@ func TestMergeScenarioComprehensive(t *testing.T) {
 			},
 		}
 
-		result := mergeScenario(parent, child)
+		result := MergeScenario(parent, child)
 
 		// String fields should be overridden by child
 		if result.VarsFile != "child-vars.yml" {
@@ -934,7 +934,7 @@ func TestMergeScenarioComprehensive(t *testing.T) {
 		}
 		child := Scenario{}
 
-		result := mergeScenario(parent, child)
+		result := MergeScenario(parent, child)
 
 		// Empty child doesn't override parent - this is the correct behavior
 		if result.PolicyJSON != "parent.json" {
@@ -981,11 +981,11 @@ func TestMinifyJSONComprehensive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := minifyJSON(tt.input)
+			got := MinifyJSON(tt.input)
 			// For some JSON, field order may vary, so just verify it's valid JSON
 			var parsed any
 			if err := json.Unmarshal([]byte(got), &parsed); err != nil {
-				t.Errorf("minifyJSON() produced invalid JSON: %v", err)
+				t.Errorf("MinifyJSON() produced invalid JSON: %v", err)
 			}
 		})
 	}
@@ -995,9 +995,9 @@ func TestExpandGlobsRelativeEdgeCases(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	t.Run("empty pattern list", func(t *testing.T) {
-		result := expandGlobsRelative(tmpDir, []string{})
+		result := ExpandGlobsRelative(tmpDir, []string{})
 		if len(result) != 0 {
-			t.Errorf("expandGlobsRelative() with empty patterns = %v, want []", result)
+			t.Errorf("ExpandGlobsRelative() with empty patterns = %v, want []", result)
 		}
 	})
 
@@ -1007,9 +1007,9 @@ func TestExpandGlobsRelativeEdgeCases(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		result := expandGlobsRelative(tmpDir, []string{"exact.json"})
+		result := ExpandGlobsRelative(tmpDir, []string{"exact.json"})
 		if len(result) != 1 {
-			t.Errorf("expandGlobsRelative() returned %v files, want 1", len(result))
+			t.Errorf("ExpandGlobsRelative() returned %v files, want 1", len(result))
 		}
 	})
 }
@@ -1027,7 +1027,7 @@ func TestParseContextTypeAllTypes(t *testing.T) {
 	for _, typeName := range allTypes {
 		t.Run(typeName, func(t *testing.T) {
 			// Should not panic
-			_ = parseContextType(typeName)
+			_ = ParseContextType(typeName)
 		})
 	}
 }
@@ -1063,10 +1063,10 @@ func TestRenderContextWithTemplates(t *testing.T) {
 		},
 	}
 
-	result := renderContext(ctx, vars)
+	result := RenderContext(ctx, vars)
 
 	if len(result) != 4 {
-		t.Errorf("renderContext() returned %v entries, want 4", len(result))
+		t.Errorf("RenderContext() returned %v entries, want 4", len(result))
 	}
 
 	// Verify username was rendered
@@ -1079,7 +1079,7 @@ func TestRenderContextWithTemplates(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("renderContext() did not render username correctly")
+		t.Error("RenderContext() did not render username correctly")
 	}
 }
 
@@ -1123,9 +1123,9 @@ vars:
 		t.Fatal(err)
 	}
 
-	result, err := loadScenarioWithExtends(childFile)
+	result, err := LoadScenarioWithExtends(childFile)
 	if err != nil {
-		t.Fatalf("loadScenarioWithExtends() error = %v", err)
+		t.Fatalf("LoadScenarioWithExtends() error = %v", err)
 	}
 
 	// Check all vars are merged correctly
@@ -1162,10 +1162,10 @@ func TestRenderStringSliceWithComplexTemplates(t *testing.T) {
 		"arn:aws:s3:::{{.bucket}}-{{.region}}-{{.account}}/*",
 	}
 
-	result := renderStringSlice(input, vars)
+	result := RenderStringSlice(input, vars)
 
 	if len(result) != 3 {
-		t.Errorf("renderStringSlice() length = %v, want 3", len(result))
+		t.Errorf("RenderStringSlice() length = %v, want 3", len(result))
 	}
 
 	expected := []string{
@@ -1176,7 +1176,7 @@ func TestRenderStringSliceWithComplexTemplates(t *testing.T) {
 
 	for i, exp := range expected {
 		if result[i] != exp {
-			t.Errorf("renderStringSlice()[%d] = %v, want %v", i, result[i], exp)
+			t.Errorf("RenderStringSlice()[%d] = %v, want %v", i, result[i], exp)
 		}
 	}
 }
@@ -1195,11 +1195,11 @@ func TestMergeSCPFilesWithEmptyStatements(t *testing.T) {
 	}
 
 	paths := []string{scp}
-	result := mergeSCPFiles(paths)
+	result := MergeSCPFiles(paths)
 
 	statements := result["Statement"].([]any)
 	if len(statements) != 0 {
-		t.Errorf("mergeSCPFiles() with empty statements = %v, want 0", len(statements))
+		t.Errorf("MergeSCPFiles() with empty statements = %v, want 0", len(statements))
 	}
 }
 
@@ -1217,87 +1217,87 @@ func (m *mockExiter) Exit(code int) {
 
 func TestDieWithMockExiter(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	// Set mock exiter
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	// Call die
-	die("test error")
+	Die("test error")
 
 	// Verify Exit was called with code 1
 	if !mockExit.called {
-		t.Error("die() did not call exiter.Exit()")
+		t.Error("Die() did not call GlobalExiter.Exit()")
 	}
 	if mockExit.exitCode != 1 {
-		t.Errorf("die() called Exit with code %d, want 1", mockExit.exitCode)
+		t.Errorf("Die() called Exit with code %d, want 1", mockExit.exitCode)
 	}
 }
 
 func TestCheckWithError(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	// Set mock exiter
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	// Call check with an error
-	check(os.ErrNotExist)
+	Check(os.ErrNotExist)
 
 	// Verify Exit was called
 	if !mockExit.called {
-		t.Error("check() did not call exiter.Exit() on error")
+		t.Error("Check() did not call GlobalExiter.Exit() on error")
 	}
 	if mockExit.exitCode != 1 {
-		t.Errorf("check() called Exit with code %d, want 1", mockExit.exitCode)
+		t.Errorf("Check() called Exit with code %d, want 1", mockExit.exitCode)
 	}
 }
 
 func TestPrintTableEmpty(t *testing.T) {
 	// Calling printTable with empty rows should print "No evaluation results."
 	// We can't easily capture stdout, but we can at least call it to ensure no panic
-	printTable([][3]string{})
+	PrintTable([][3]string{})
 }
 
 func TestMinifyJSONErrorPath(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	// Set mock exiter
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	// Call minifyJSON with invalid JSON that can't be compacted or unmarshaled
 	invalidJSON := []byte("not json at all")
-	_ = minifyJSON(invalidJSON)
+	_ = MinifyJSON(invalidJSON)
 
 	// Verify die was called
 	if !mockExit.called {
-		t.Error("minifyJSON() did not call die() on invalid JSON")
+		t.Error("MinifyJSON() did not call Die() on invalid JSON")
 	}
 }
 
 func TestParseContextTypeDefault(t *testing.T) {
 	// Test the default case
-	result := parseContextType("unknown_type")
+	result := ParseContextType("unknown_type")
 	if result != types.ContextKeyTypeEnumString {
-		t.Errorf("parseContextType() default = %v, want String", result)
+		t.Errorf("ParseContextType() default = %v, want String", result)
 	}
 }
 
 // Test runLegacyFormat with actual mock
 func TestRunLegacyFormatIntegration(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	resource := "arn:aws:s3:::my-bucket/*"
@@ -1327,21 +1327,21 @@ func TestRunLegacyFormatIntegration(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat
-	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
 
 	// Should not have exited
 	if mockExit.called {
-		t.Errorf("runLegacyFormat() called Exit when expectations matched")
+		t.Errorf("RunLegacyFormat() called Exit when expectations matched")
 	}
 }
 
 func TestRunLegacyFormatWithFailure(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	resource := "arn:aws:s3:::my-bucket/*"
@@ -1371,24 +1371,24 @@ func TestRunLegacyFormatWithFailure(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat
-	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
 
 	// Should have exited with code 2
 	if !mockExit.called {
-		t.Error("runLegacyFormat() did not call Exit on expectation failure")
+		t.Error("RunLegacyFormat() did not call Exit on expectation failure")
 	}
 	if mockExit.exitCode != 2 {
-		t.Errorf("runLegacyFormat() called Exit with code %d, want 2", mockExit.exitCode)
+		t.Errorf("RunLegacyFormat() called Exit with code %d, want 2", mockExit.exitCode)
 	}
 }
 
 func TestRunLegacyFormatWithNoAssert(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	resource := "arn:aws:s3:::my-bucket/*"
@@ -1418,21 +1418,21 @@ func TestRunLegacyFormatWithNoAssert(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat with noAssert=true
-	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", true)
+	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", true)
 
 	// Should NOT have exited
 	if mockExit.called {
-		t.Error("runLegacyFormat() called Exit when noAssert=true")
+		t.Error("RunLegacyFormat() called Exit when noAssert=true")
 	}
 }
 
 func TestRunLegacyFormatWithPermissionsBoundary(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	resource := "arn:aws:s3:::my-bucket/*"
@@ -1463,7 +1463,7 @@ func TestRunLegacyFormatWithPermissionsBoundary(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat with permissions boundary
-	runLegacyFormat(mockClient, scen, policyJSON, pbJSON, "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, policyJSON, pbJSON, "", allVars, "", false)
 
 	// Verify permissions boundary was passed
 	if capturedInput == nil {
@@ -1479,11 +1479,11 @@ func TestRunLegacyFormatWithPermissionsBoundary(t *testing.T) {
 
 func TestRunTestCollectionIntegration(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	tmpDir := t.TempDir()
 	action := "s3:GetObject"
@@ -1519,21 +1519,21 @@ func TestRunTestCollectionIntegration(t *testing.T) {
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
 
 	// Call runTestCollection
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Should not have exited (all tests passed)
 	if mockExit.called {
-		t.Errorf("runTestCollection() called Exit when all tests passed")
+		t.Errorf("RunTestCollection() called Exit when all tests passed")
 	}
 }
 
 func TestRunTestCollectionWithFailure(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	tmpDir := t.TempDir()
 	action := "s3:GetObject"
@@ -1567,24 +1567,24 @@ func TestRunTestCollectionWithFailure(t *testing.T) {
 
 	// Call runTestCollection
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Should have exited with code 2 (test failed)
 	if !mockExit.called {
-		t.Error("runTestCollection() did not call Exit on test failure")
+		t.Error("RunTestCollection() did not call Exit on test failure")
 	}
 	if mockExit.exitCode != 2 {
-		t.Errorf("runTestCollection() called Exit with code %d, want 2", mockExit.exitCode)
+		t.Errorf("RunTestCollection() called Exit with code %d, want 2", mockExit.exitCode)
 	}
 }
 
 func TestRunTestCollectionMultipleTests(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	tmpDir := t.TempDir()
 
@@ -1626,7 +1626,7 @@ func TestRunTestCollectionMultipleTests(t *testing.T) {
 
 	// Call runTestCollection
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Should have called SimulateCustomPolicy twice
 	if callCount != 2 {
@@ -1635,17 +1635,17 @@ func TestRunTestCollectionMultipleTests(t *testing.T) {
 
 	// Should not have exited
 	if mockExit.called {
-		t.Error("runTestCollection() called Exit when all tests passed")
+		t.Error("RunTestCollection() called Exit when all tests passed")
 	}
 }
 
 func TestRunTestCollectionWithResourcePolicy(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	tmpDir := t.TempDir()
 
@@ -1691,7 +1691,7 @@ func TestRunTestCollectionWithResourcePolicy(t *testing.T) {
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
 
 	// Call runTestCollection
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Verify resource policy was passed
 	if capturedInput.ResourcePolicy == nil {
@@ -1701,11 +1701,11 @@ func TestRunTestCollectionWithResourcePolicy(t *testing.T) {
 
 func TestRunTestCollectionWithContext(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	tmpDir := t.TempDir()
 
@@ -1747,7 +1747,7 @@ func TestRunTestCollectionWithContext(t *testing.T) {
 
 	// Call runTestCollection
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Verify both scenario-level and test-level context were merged
 	if len(capturedInput.ContextEntries) != 2 {
@@ -1757,11 +1757,11 @@ func TestRunTestCollectionWithContext(t *testing.T) {
 
 func TestRunLegacyFormatWithResourcePolicy(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	resource := "arn:aws:s3:::my-bucket/*"
@@ -1797,7 +1797,7 @@ func TestRunLegacyFormatWithResourcePolicy(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat with resource policy and other options
-	runLegacyFormat(mockClient, scen, policyJSON, "", resourcePolicy, allVars, "", false)
+	RunLegacyFormat(mockClient, scen, policyJSON, "", resourcePolicy, allVars, "", false)
 
 	// Verify all parameters were passed
 	if capturedInput.ResourcePolicy == nil || *capturedInput.ResourcePolicy != resourcePolicy {
@@ -1830,10 +1830,10 @@ func TestMergeSCPFilesEdgeCases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := mergeSCPFiles([]string{scpSingle})
+	result := MergeSCPFiles([]string{scpSingle})
 	statements := result["Statement"].([]any)
 	if len(statements) != 1 {
-		t.Errorf("mergeSCPFiles() with single Statement object = %v statements, want 1", len(statements))
+		t.Errorf("MergeSCPFiles() with single Statement object = %v statements, want 1", len(statements))
 	}
 
 	// Test with non-map document
@@ -1843,10 +1843,10 @@ func TestMergeSCPFilesEdgeCases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result2 := mergeSCPFiles([]string{scpArray})
+	result2 := MergeSCPFiles([]string{scpArray})
 	statements2 := result2["Statement"].([]any)
 	if len(statements2) != 1 {
-		t.Errorf("mergeSCPFiles() with array document = %v statements, want 1", len(statements2))
+		t.Errorf("MergeSCPFiles() with array document = %v statements, want 1", len(statements2))
 	}
 }
 
@@ -1860,9 +1860,9 @@ func TestExpandGlobsRelativeWithAbsolutePath(t *testing.T) {
 	}
 
 	// Test with absolute path (should not join with base)
-	result := expandGlobsRelative("/some/base", []string{file})
+	result := ExpandGlobsRelative("/some/base", []string{file})
 	if len(result) != 1 {
-		t.Errorf("expandGlobsRelative() with absolute path returned %v files, want 1", len(result))
+		t.Errorf("ExpandGlobsRelative() with absolute path returned %v files, want 1", len(result))
 	}
 }
 
@@ -1880,19 +1880,19 @@ vars:
 		t.Fatal(err)
 	}
 
-	_, err := loadScenarioWithExtends(childFile)
+	_, err := LoadScenarioWithExtends(childFile)
 	if err == nil {
-		t.Error("loadScenarioWithExtends() should return error when parent doesn't exist")
+		t.Error("LoadScenarioWithExtends() should return error when parent doesn't exist")
 	}
 }
 
 func TestRunTestCollectionWithSaveFile(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	tmpDir := t.TempDir()
 	saveFile := filepath.Join(tmpDir, "output.json")
@@ -1926,21 +1926,21 @@ func TestRunTestCollectionWithSaveFile(t *testing.T) {
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
 
 	// Call runTestCollection with save file
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, saveFile, false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, saveFile, false)
 
 	// Verify save file was created
 	if _, err := os.Stat(saveFile); os.IsNotExist(err) {
-		t.Error("runTestCollection() did not create save file")
+		t.Error("RunTestCollection() did not create save file")
 	}
 }
 
 func TestRunLegacyFormatWithSaveFile(t *testing.T) {
 	// Save original exiter
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	tmpDir := t.TempDir()
 	saveFile := filepath.Join(tmpDir, "output.json")
@@ -1968,21 +1968,21 @@ func TestRunLegacyFormatWithSaveFile(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat with save file
-	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, saveFile, false)
+	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, saveFile, false)
 
 	// Verify save file was created
 	if _, err := os.Stat(saveFile); os.IsNotExist(err) {
-		t.Error("runLegacyFormat() did not create save file")
+		t.Error("RunLegacyFormat() did not create save file")
 	}
 }
 
 // TestRunTestCollectionWithCallerArnOverride tests test-level CallerArn override
 func TestRunTestCollectionWithCallerArnOverride(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	var capturedInput *iam.SimulateCustomPolicyInput
@@ -2018,7 +2018,7 @@ func TestRunTestCollectionWithCallerArnOverride(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Verify test-level CallerArn was used
 	if capturedInput == nil || capturedInput.CallerArn == nil {
@@ -2031,11 +2031,11 @@ func TestRunTestCollectionWithCallerArnOverride(t *testing.T) {
 
 // TestRunTestCollectionWithResourceOwnerOverride tests test-level ResourceOwner override
 func TestRunTestCollectionWithResourceOwnerOverride(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	var capturedInput *iam.SimulateCustomPolicyInput
@@ -2071,7 +2071,7 @@ func TestRunTestCollectionWithResourceOwnerOverride(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Verify test-level ResourceOwner was used
 	if capturedInput == nil || capturedInput.ResourceOwner == nil {
@@ -2084,11 +2084,11 @@ func TestRunTestCollectionWithResourceOwnerOverride(t *testing.T) {
 
 // TestRunTestCollectionWithResourceHandlingOptionOverride tests test-level ResourceHandlingOption override
 func TestRunTestCollectionWithResourceHandlingOptionOverride(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	var capturedInput *iam.SimulateCustomPolicyInput
@@ -2124,7 +2124,7 @@ func TestRunTestCollectionWithResourceHandlingOptionOverride(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Verify test-level ResourceHandlingOption was used
 	if capturedInput == nil || capturedInput.ResourceHandlingOption == nil {
@@ -2148,7 +2148,7 @@ func TestMergeScenarioWithTests(t *testing.T) {
 		},
 	}
 
-	result := mergeScenario(parent, child)
+	result := MergeScenario(parent, child)
 
 	// Tests should be replaced, not merged
 	if len(result.Tests) != 1 {
@@ -2168,7 +2168,7 @@ func TestMergeScenarioWithCallerArn(t *testing.T) {
 		CallerArn: "arn:aws:iam::123456789012:user/child",
 	}
 
-	result := mergeScenario(parent, child)
+	result := MergeScenario(parent, child)
 
 	if result.CallerArn != "arn:aws:iam::123456789012:user/child" {
 		t.Errorf("Expected child CallerArn, got %s", result.CallerArn)
@@ -2184,7 +2184,7 @@ func TestMergeScenarioWithResourceOwner(t *testing.T) {
 		ResourceOwner: "987654321098",
 	}
 
-	result := mergeScenario(parent, child)
+	result := MergeScenario(parent, child)
 
 	if result.ResourceOwner != "987654321098" {
 		t.Errorf("Expected child ResourceOwner, got %s", result.ResourceOwner)
@@ -2200,7 +2200,7 @@ func TestMergeScenarioWithResourceHandlingOption(t *testing.T) {
 		ResourceHandlingOption: "prefix",
 	}
 
-	result := mergeScenario(parent, child)
+	result := MergeScenario(parent, child)
 
 	if result.ResourceHandlingOption != "prefix" {
 		t.Errorf("Expected child ResourceHandlingOption, got %s", result.ResourceHandlingOption)
@@ -2209,11 +2209,11 @@ func TestMergeScenarioWithResourceHandlingOption(t *testing.T) {
 
 // TestRunLegacyFormatWithCallerArn tests CallerArn rendering
 func TestRunLegacyFormatWithCallerArn(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	var capturedInput *iam.SimulateCustomPolicyInput
@@ -2243,7 +2243,7 @@ func TestRunLegacyFormatWithCallerArn(t *testing.T) {
 		"account": "123456789012",
 	}
 
-	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
 
 	// Verify CallerArn was rendered and set
 	if capturedInput == nil || capturedInput.CallerArn == nil {
@@ -2256,11 +2256,11 @@ func TestRunLegacyFormatWithCallerArn(t *testing.T) {
 
 // TestRunLegacyFormatWithResourceOwner tests ResourceOwner rendering
 func TestRunLegacyFormatWithResourceOwner(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	var capturedInput *iam.SimulateCustomPolicyInput
@@ -2289,7 +2289,7 @@ func TestRunLegacyFormatWithResourceOwner(t *testing.T) {
 		"account": "123456789012",
 	}
 
-	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
 
 	// Verify ResourceOwner was rendered and set
 	if capturedInput == nil || capturedInput.ResourceOwner == nil {
@@ -2302,11 +2302,11 @@ func TestRunLegacyFormatWithResourceOwner(t *testing.T) {
 
 // TestRunLegacyFormatWithResourceHandlingOption tests ResourceHandlingOption
 func TestRunLegacyFormatWithResourceHandlingOption(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	var capturedInput *iam.SimulateCustomPolicyInput
@@ -2333,7 +2333,7 @@ func TestRunLegacyFormatWithResourceHandlingOption(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
 
 	// Verify ResourceHandlingOption was set
 	if capturedInput == nil || capturedInput.ResourceHandlingOption == nil {
@@ -2346,11 +2346,11 @@ func TestRunLegacyFormatWithResourceHandlingOption(t *testing.T) {
 
 // TestRunTestCollectionNoExpectation tests test without expectation
 func TestRunTestCollectionNoExpectation(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	mockClient := &mockIAMClient{
@@ -2382,21 +2382,21 @@ func TestRunTestCollectionNoExpectation(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Should not have exited
 	if mockExit.called {
-		t.Error("runTestCollection() should not exit when test has no expectation")
+		t.Error("RunTestCollection() should not exit when test has no expectation")
 	}
 }
 
 // TestRunTestCollectionNamedTestFailure tests failure with custom test name
 func TestRunTestCollectionNamedTestFailure(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	mockClient := &mockIAMClient{
@@ -2429,7 +2429,7 @@ func TestRunTestCollectionNamedTestFailure(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Deny","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Should have exited with code 2
 	if !mockExit.called || mockExit.exitCode != 2 {
@@ -2450,7 +2450,7 @@ func TestMergeScenarioWithContext(t *testing.T) {
 		},
 	}
 
-	result := mergeScenario(parent, child)
+	result := MergeScenario(parent, child)
 
 	// Context should be replaced, not merged
 	if len(result.Context) != 1 {
@@ -2475,7 +2475,7 @@ func TestMergeScenarioWithExpectDeepMerge(t *testing.T) {
 		},
 	}
 
-	result := mergeScenario(parent, child)
+	result := MergeScenario(parent, child)
 
 	// Expect should be deep-merged
 	if len(result.Expect) != 3 {
@@ -2498,7 +2498,7 @@ func TestMergeScenarioWithResourcePolicyTemplate(t *testing.T) {
 		ResourcePolicyTemplate: "child.json.tpl",
 	}
 
-	result := mergeScenario(parent, child)
+	result := MergeScenario(parent, child)
 
 	if result.ResourcePolicyTemplate != "child.json.tpl" {
 		t.Errorf("Expected child ResourcePolicyTemplate, got %s", result.ResourcePolicyTemplate)
@@ -2517,7 +2517,7 @@ func TestMergeScenarioWithResourcePolicyJSON(t *testing.T) {
 		ResourcePolicyJSON: "child.json",
 	}
 
-	result := mergeScenario(parent, child)
+	result := MergeScenario(parent, child)
 
 	if result.ResourcePolicyJSON != "child.json" {
 		t.Errorf("Expected child ResourcePolicyJSON, got %s", result.ResourcePolicyJSON)
@@ -2536,7 +2536,7 @@ func TestMergeScenarioWithPolicyTemplate(t *testing.T) {
 		PolicyTemplate: "child.json.tpl",
 	}
 
-	result := mergeScenario(parent, child)
+	result := MergeScenario(parent, child)
 
 	if result.PolicyTemplate != "child.json.tpl" {
 		t.Errorf("Expected child PolicyTemplate, got %s", result.PolicyTemplate)
@@ -2551,7 +2551,7 @@ func TestExpandGlobsRelativeNoMatches(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// No files exist, glob should return empty
-	result := expandGlobsRelative(tmpDir, []string{"*.nonexistent"})
+	result := ExpandGlobsRelative(tmpDir, []string{"*.nonexistent"})
 
 	if len(result) != 0 {
 		t.Errorf("Expected 0 files, got %d", len(result))
@@ -2586,7 +2586,7 @@ func TestMergeSCPFilesWithMultipleStatements(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	policy := mergeSCPFiles([]string{scp1, scp2})
+	policy := MergeSCPFiles([]string{scp1, scp2})
 
 	// Should merge all statements from both files
 	statements, ok := policy["Statement"].([]any)
@@ -2600,11 +2600,11 @@ func TestMergeSCPFilesWithMultipleStatements(t *testing.T) {
 
 // TestRunTestCollectionWithResources tests test with Resources array (not Resource)
 func TestRunTestCollectionWithResources(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	var capturedInput *iam.SimulateCustomPolicyInput
@@ -2641,7 +2641,7 @@ func TestRunTestCollectionWithResources(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Verify Resources array was used
 	if capturedInput == nil || len(capturedInput.ResourceArns) != 2 {
@@ -2651,11 +2651,11 @@ func TestRunTestCollectionWithResources(t *testing.T) {
 
 // TestRunLegacyFormatWithMatchedStatements tests the matched statements display
 func TestRunLegacyFormatWithMatchedStatements(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	sourcePolicy := "policy-1"
@@ -2688,21 +2688,21 @@ func TestRunLegacyFormatWithMatchedStatements(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
 
 	// Should not have exited
 	if mockExit.called {
-		t.Error("runLegacyFormat() should not exit when expectation passes")
+		t.Error("RunLegacyFormat() should not exit when expectation passes")
 	}
 }
 
 // TestRunTestCollectionWithMatchedStatements tests the matched statements display in test collection
 func TestRunTestCollectionWithMatchedStatements(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	sourcePolicy := "policy-1"
@@ -2740,21 +2740,21 @@ func TestRunTestCollectionWithMatchedStatements(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Should not have exited
 	if mockExit.called {
-		t.Error("runTestCollection() should not exit when all tests pass")
+		t.Error("RunTestCollection() should not exit when all tests pass")
 	}
 }
 
 // TestRunTestCollectionFailureWithUnnamedTest tests failure path with unnamed test
 func TestRunTestCollectionFailureWithUnnamedTest(t *testing.T) {
-	originalExiter := exiter
-	defer func() { exiter = originalExiter }()
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
 
 	mockExit := &mockExiter{}
-	exiter = mockExit
+	GlobalExiter = mockExit
 
 	action := "s3:GetObject"
 	mockClient := &mockIAMClient{
@@ -2787,7 +2787,7 @@ func TestRunTestCollectionFailureWithUnnamedTest(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Deny","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
 
 	// Should have exited with code 2
 	if !mockExit.called || mockExit.exitCode != 2 {
@@ -2806,7 +2806,7 @@ func TestMergeScenarioVarsInitialization(t *testing.T) {
 		},
 	}
 
-	result := mergeScenario(parent, child)
+	result := MergeScenario(parent, child)
 
 	if result.Vars == nil {
 		t.Error("Vars should be initialized")
