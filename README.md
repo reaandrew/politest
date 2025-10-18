@@ -16,6 +16,49 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
 - **Expectation assertions** for CI/CD integration
 - **Clean table output** with optional raw JSON export
 
+## ⚠️ Important: Understanding What politest Tests
+
+**politest is a pre-deployment validation tool, NOT a replacement for integration testing.**
+
+### What politest Does
+
+politest uses AWS's `SimulateCustomPolicy` API to evaluate policies **before deployment**. This provides:
+
+✅ **Fast feedback loop** - Test policy changes in seconds without deploying
+✅ **Blended testing** - See how identity policies interact with SCPs/RCPs
+✅ **Fail fast** - Catch obvious misconfigurations early in development
+✅ **CI/CD integration** - Automated policy validation on every commit
+
+### Important Limitations
+
+⚠️ **politest "bends the rules" for testing convenience:**
+
+- **SCPs/RCPs in SimulateCustomPolicy**: The API wasn't designed for testing organizational policies alongside identity policies. politest uses the `PermissionsBoundaryPolicyInputList` parameter to simulate SCP/RCP behavior, which **approximates** real-world behavior but may not be 100% accurate.
+
+- **Simulation vs Reality**: `SimulateCustomPolicy` provides a **best-effort simulation**. Some complex conditions, resource policy interactions, and edge cases may behave differently in production.
+
+- **Missing Context**: Real AWS environments have additional factors (resource ownership, trust policies, session policies, permission boundaries) that may not be fully captured in simulation.
+
+### What You Still Need
+
+✅ **Integration testing in actual AWS accounts** - Deploy policies to dev/staging and test real resource access
+✅ **Production validation** - Verify permissions work as expected with real workloads
+✅ **Security reviews** - Have security teams review policies before production deployment
+
+### Our Philosophy
+
+> **politest helps you fail faster, not fail less.**
+
+Use politest to:
+- Catch obvious mistakes **before** deploying
+- Get **quick feedback** during policy development
+- Run **automated checks** in CI/CD pipelines
+- Review policies working **within organizational constraints**
+
+Then validate with real integration tests in your AWS accounts.
+
+Think of politest as **unit tests for IAM policies** - essential for development, but not sufficient alone.
+
 ## Installation
 
 ```bash
