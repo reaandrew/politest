@@ -140,9 +140,10 @@ jobs:
       with:
         args: >
           -Dsonar.qualitygate.wait=false
+      continue-on-error: true
 
     - name: Check Quality Gate Status
-      if: success()
+      if: steps.sonar-scan.outcome == 'success'
       timeout-minutes: 5
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -195,6 +196,16 @@ jobs:
           exit 1
         else
           echo "Quality Gate passed successfully!"
+        fi
+
+    - name: Report SonarCloud Status
+      if: always()
+      run: |
+        if [ "${{ steps.sonar-scan.outcome }}" == "success" ]; then
+          echo "SonarCloud scan completed successfully"
+        else
+          echo "SonarCloud scan skipped or failed - this is expected if the project doesn't exist yet"
+          echo "Visit https://sonarcloud.io to create the project: reaandrew_politest"
         fi
 
   semgrep:
