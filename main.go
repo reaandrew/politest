@@ -60,6 +60,24 @@ type ContextEntryYml struct {
 	ContextKeyType   string   `yaml:"ContextKeyType"` // string, stringList, numeric, etc.
 }
 
+// Exiter interface allows os.Exit to be mocked for testing
+type Exiter interface {
+	Exit(code int)
+}
+
+type realExiter struct{}
+
+func (realExiter) Exit(code int) {
+	os.Exit(code)
+}
+
+var exiter Exiter = realExiter{}
+
+// IAMSimulator interface allows IAM client to be mocked for testing
+type IAMSimulator interface {
+	SimulateCustomPolicy(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error)
+}
+
 func main() {
 	var scenarioPath string
 	var savePath string
@@ -156,7 +174,7 @@ func main() {
 
 // ---------- Test runners ----------
 
-func runLegacyFormat(client *iam.Client, scen *Scenario, policyJSON, pbJSON, resourcePolicyJSON string, allVars map[string]any, savePath string, noAssert bool) {
+func runLegacyFormat(client IAMSimulator, scen *Scenario, policyJSON, pbJSON, resourcePolicyJSON string, allVars map[string]any, savePath string, noAssert bool) {
 	// Render actions/resources/context with Go templates
 	actions := renderStringSlice(scen.Actions, allVars)
 	resources := renderStringSlice(scen.Resources, allVars)
@@ -233,11 +251,11 @@ func runLegacyFormat(client *iam.Client, scen *Scenario, policyJSON, pbJSON, res
 		for _, f := range failures {
 			fmt.Printf("  - %s: expected %s, got %s\n", f[0], f[1], ifEmpty(f[2], "<missing>"))
 		}
-		os.Exit(2)
+		exiter.Exit(2)
 	}
 }
 
-func runTestCollection(client *iam.Client, scen *Scenario, policyJSON, pbJSON, resourcePolicyJSON, absScenario string, allVars map[string]any, savePath string, noAssert bool) {
+func runTestCollection(client IAMSimulator, scen *Scenario, policyJSON, pbJSON, resourcePolicyJSON, absScenario string, allVars map[string]any, savePath string, noAssert bool) {
 	passCount := 0
 	failCount := 0
 	var allResponses []*iam.SimulateCustomPolicyOutput
@@ -402,7 +420,7 @@ func runTestCollection(client *iam.Client, scen *Scenario, policyJSON, pbJSON, r
 
 	// Exit with error if any failures and not no-assert
 	if failCount > 0 && !noAssert {
-		os.Exit(2)
+		exiter.Exit(2)
 	}
 }
 
@@ -716,5 +734,5 @@ func check(err error) {
 
 func die(f string, a ...any) {
 	fmt.Fprintf(os.Stderr, f+"\n", a...)
-	os.Exit(1)
+	exiter.Exit(1)
 }
