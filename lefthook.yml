@@ -1,0 +1,30 @@
+pre-commit:
+  parallel: true
+  commands:
+    fmt:
+      glob: "*.go"
+      run: gofmt -w {staged_files} && git add {staged_files}
+
+    vet:
+      glob: "*.go"
+      run: go vet ./...
+
+    staticcheck:
+      glob: "*.go"
+      run: staticcheck ./...
+
+    test:
+      glob: "*.go"
+      run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+    mod-tidy:
+      glob: "go.{mod,sum}"
+      run: go mod tidy
+
+    trailing-whitespace:
+      glob: "*"
+      run: |
+        if grep -rn '[[:blank:]]$' {staged_files}; then
+          echo "Error: Trailing whitespace found"
+          exit 1
+        fi
