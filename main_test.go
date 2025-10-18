@@ -1975,3 +1975,843 @@ func TestRunLegacyFormatWithSaveFile(t *testing.T) {
 		t.Error("runLegacyFormat() did not create save file")
 	}
 }
+
+// TestRunTestCollectionWithCallerArnOverride tests test-level CallerArn override
+func TestRunTestCollectionWithCallerArnOverride(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	var capturedInput *iam.SimulateCustomPolicyInput
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			capturedInput = params
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+					},
+				},
+			}, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		CallerArn: "arn:aws:iam::123456789012:user/scenario-user",
+		Tests: []TestCase{
+			{
+				Action:    "s3:GetObject",
+				Resource:  "arn:aws:s3:::bucket/*",
+				Expect:    "allowed",
+				CallerArn: "arn:aws:iam::123456789012:user/test-user",
+			},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+
+	// Verify test-level CallerArn was used
+	if capturedInput == nil || capturedInput.CallerArn == nil {
+		t.Fatal("Expected CallerArn to be set")
+	}
+	if *capturedInput.CallerArn != "arn:aws:iam::123456789012:user/test-user" {
+		t.Errorf("Expected test-level CallerArn, got %s", *capturedInput.CallerArn)
+	}
+}
+
+// TestRunTestCollectionWithResourceOwnerOverride tests test-level ResourceOwner override
+func TestRunTestCollectionWithResourceOwnerOverride(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	var capturedInput *iam.SimulateCustomPolicyInput
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			capturedInput = params
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+					},
+				},
+			}, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		ResourceOwner: "123456789012",
+		Tests: []TestCase{
+			{
+				Action:        "s3:GetObject",
+				Resource:      "arn:aws:s3:::bucket/*",
+				Expect:        "allowed",
+				ResourceOwner: "987654321098",
+			},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+
+	// Verify test-level ResourceOwner was used
+	if capturedInput == nil || capturedInput.ResourceOwner == nil {
+		t.Fatal("Expected ResourceOwner to be set")
+	}
+	if *capturedInput.ResourceOwner != "987654321098" {
+		t.Errorf("Expected test-level ResourceOwner, got %s", *capturedInput.ResourceOwner)
+	}
+}
+
+// TestRunTestCollectionWithResourceHandlingOptionOverride tests test-level ResourceHandlingOption override
+func TestRunTestCollectionWithResourceHandlingOptionOverride(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	var capturedInput *iam.SimulateCustomPolicyInput
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			capturedInput = params
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+					},
+				},
+			}, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		ResourceHandlingOption: "arn",
+		Tests: []TestCase{
+			{
+				Action:                 "s3:GetObject",
+				Resource:               "arn:aws:s3:::bucket/*",
+				Expect:                 "allowed",
+				ResourceHandlingOption: "prefix",
+			},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+
+	// Verify test-level ResourceHandlingOption was used
+	if capturedInput == nil || capturedInput.ResourceHandlingOption == nil {
+		t.Fatal("Expected ResourceHandlingOption to be set")
+	}
+	if *capturedInput.ResourceHandlingOption != "prefix" {
+		t.Errorf("Expected test-level ResourceHandlingOption, got %s", *capturedInput.ResourceHandlingOption)
+	}
+}
+
+// TestMergeScenarioWithTests tests merging scenarios with Tests field
+func TestMergeScenarioWithTests(t *testing.T) {
+	parent := Scenario{
+		Tests: []TestCase{
+			{Action: "s3:GetObject", Expect: "allowed"},
+		},
+	}
+	child := Scenario{
+		Tests: []TestCase{
+			{Action: "s3:PutObject", Expect: "denied"},
+		},
+	}
+
+	result := mergeScenario(parent, child)
+
+	// Tests should be replaced, not merged
+	if len(result.Tests) != 1 {
+		t.Errorf("Expected 1 test, got %d", len(result.Tests))
+	}
+	if result.Tests[0].Action != "s3:PutObject" {
+		t.Errorf("Expected child test, got %s", result.Tests[0].Action)
+	}
+}
+
+// TestMergeScenarioWithCallerArn tests merging scenarios with CallerArn
+func TestMergeScenarioWithCallerArn(t *testing.T) {
+	parent := Scenario{
+		CallerArn: "arn:aws:iam::123456789012:user/parent",
+	}
+	child := Scenario{
+		CallerArn: "arn:aws:iam::123456789012:user/child",
+	}
+
+	result := mergeScenario(parent, child)
+
+	if result.CallerArn != "arn:aws:iam::123456789012:user/child" {
+		t.Errorf("Expected child CallerArn, got %s", result.CallerArn)
+	}
+}
+
+// TestMergeScenarioWithResourceOwner tests merging scenarios with ResourceOwner
+func TestMergeScenarioWithResourceOwner(t *testing.T) {
+	parent := Scenario{
+		ResourceOwner: "123456789012",
+	}
+	child := Scenario{
+		ResourceOwner: "987654321098",
+	}
+
+	result := mergeScenario(parent, child)
+
+	if result.ResourceOwner != "987654321098" {
+		t.Errorf("Expected child ResourceOwner, got %s", result.ResourceOwner)
+	}
+}
+
+// TestMergeScenarioWithResourceHandlingOption tests merging scenarios with ResourceHandlingOption
+func TestMergeScenarioWithResourceHandlingOption(t *testing.T) {
+	parent := Scenario{
+		ResourceHandlingOption: "arn",
+	}
+	child := Scenario{
+		ResourceHandlingOption: "prefix",
+	}
+
+	result := mergeScenario(parent, child)
+
+	if result.ResourceHandlingOption != "prefix" {
+		t.Errorf("Expected child ResourceHandlingOption, got %s", result.ResourceHandlingOption)
+	}
+}
+
+// TestRunLegacyFormatWithCallerArn tests CallerArn rendering
+func TestRunLegacyFormatWithCallerArn(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	var capturedInput *iam.SimulateCustomPolicyInput
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			capturedInput = params
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+					},
+				},
+			}, nil
+		},
+	}
+
+	scen := &Scenario{
+		Actions:   []string{action},
+		Resources: []string{"arn:aws:s3:::{{.bucket}}/*"},
+		CallerArn: "arn:aws:iam::{{.account}}:user/test",
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{
+		"bucket":  "my-bucket",
+		"account": "123456789012",
+	}
+
+	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+
+	// Verify CallerArn was rendered and set
+	if capturedInput == nil || capturedInput.CallerArn == nil {
+		t.Fatal("Expected CallerArn to be set")
+	}
+	if *capturedInput.CallerArn != "arn:aws:iam::123456789012:user/test" {
+		t.Errorf("Expected rendered CallerArn, got %s", *capturedInput.CallerArn)
+	}
+}
+
+// TestRunLegacyFormatWithResourceOwner tests ResourceOwner rendering
+func TestRunLegacyFormatWithResourceOwner(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	var capturedInput *iam.SimulateCustomPolicyInput
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			capturedInput = params
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+					},
+				},
+			}, nil
+		},
+	}
+
+	scen := &Scenario{
+		Actions:       []string{action},
+		Resources:     []string{"arn:aws:s3:::bucket/*"},
+		ResourceOwner: "{{.account}}",
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{
+		"account": "123456789012",
+	}
+
+	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+
+	// Verify ResourceOwner was rendered and set
+	if capturedInput == nil || capturedInput.ResourceOwner == nil {
+		t.Fatal("Expected ResourceOwner to be set")
+	}
+	if *capturedInput.ResourceOwner != "123456789012" {
+		t.Errorf("Expected rendered ResourceOwner, got %s", *capturedInput.ResourceOwner)
+	}
+}
+
+// TestRunLegacyFormatWithResourceHandlingOption tests ResourceHandlingOption
+func TestRunLegacyFormatWithResourceHandlingOption(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	var capturedInput *iam.SimulateCustomPolicyInput
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			capturedInput = params
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+					},
+				},
+			}, nil
+		},
+	}
+
+	scen := &Scenario{
+		Actions:                []string{action},
+		Resources:              []string{"arn:aws:s3:::bucket/*"},
+		ResourceHandlingOption: "prefix",
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+
+	// Verify ResourceHandlingOption was set
+	if capturedInput == nil || capturedInput.ResourceHandlingOption == nil {
+		t.Fatal("Expected ResourceHandlingOption to be set")
+	}
+	if *capturedInput.ResourceHandlingOption != "prefix" {
+		t.Errorf("Expected ResourceHandlingOption 'prefix', got %s", *capturedInput.ResourceHandlingOption)
+	}
+}
+
+// TestRunTestCollectionNoExpectation tests test without expectation
+func TestRunTestCollectionNoExpectation(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+					},
+				},
+			}, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		Tests: []TestCase{
+			{
+				Action:   "s3:GetObject",
+				Resource: "arn:aws:s3:::bucket/*",
+				// No Expect field - should just show result
+			},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+
+	// Should not have exited
+	if mockExit.called {
+		t.Error("runTestCollection() should not exit when test has no expectation")
+	}
+}
+
+// TestRunTestCollectionNamedTestFailure tests failure with custom test name
+func TestRunTestCollectionNamedTestFailure(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeExplicitDeny,
+					},
+				},
+			}, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		Tests: []TestCase{
+			{
+				Name:     "Custom test name",
+				Action:   "s3:GetObject",
+				Resource: "arn:aws:s3:::bucket/*",
+				Expect:   "allowed",
+			},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Deny","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+
+	// Should have exited with code 2
+	if !mockExit.called || mockExit.exitCode != 2 {
+		t.Errorf("Expected exit code 2, got called=%v code=%d", mockExit.called, mockExit.exitCode)
+	}
+}
+
+// TestMergeScenarioWithContext tests merging scenarios with Context
+func TestMergeScenarioWithContext(t *testing.T) {
+	parent := Scenario{
+		Context: []ContextEntryYml{
+			{ContextKeyName: "aws:userid", ContextKeyValues: []string{"parent-user"}, ContextKeyType: "string"},
+		},
+	}
+	child := Scenario{
+		Context: []ContextEntryYml{
+			{ContextKeyName: "aws:userid", ContextKeyValues: []string{"child-user"}, ContextKeyType: "string"},
+		},
+	}
+
+	result := mergeScenario(parent, child)
+
+	// Context should be replaced, not merged
+	if len(result.Context) != 1 {
+		t.Errorf("Expected 1 context entry, got %d", len(result.Context))
+	}
+	if result.Context[0].ContextKeyValues[0] != "child-user" {
+		t.Errorf("Expected child context, got %s", result.Context[0].ContextKeyValues[0])
+	}
+}
+
+// TestMergeScenarioWithExpectDeepMerge tests that Expect maps are deep-merged
+func TestMergeScenarioWithExpectDeepMerge(t *testing.T) {
+	parent := Scenario{
+		Expect: map[string]string{
+			"s3:GetObject": "allowed",
+			"s3:PutObject": "denied",
+		},
+	}
+	child := Scenario{
+		Expect: map[string]string{
+			"s3:DeleteObject": "denied",
+		},
+	}
+
+	result := mergeScenario(parent, child)
+
+	// Expect should be deep-merged
+	if len(result.Expect) != 3 {
+		t.Errorf("Expected 3 expectations, got %d", len(result.Expect))
+	}
+	if result.Expect["s3:GetObject"] != "allowed" {
+		t.Error("Parent expectation should be preserved")
+	}
+	if result.Expect["s3:DeleteObject"] != "denied" {
+		t.Error("Child expectation should be added")
+	}
+}
+
+// TestMergeScenarioWithResourcePolicyTemplate tests ResourcePolicyTemplate merging
+func TestMergeScenarioWithResourcePolicyTemplate(t *testing.T) {
+	parent := Scenario{
+		ResourcePolicyJSON: "parent.json",
+	}
+	child := Scenario{
+		ResourcePolicyTemplate: "child.json.tpl",
+	}
+
+	result := mergeScenario(parent, child)
+
+	if result.ResourcePolicyTemplate != "child.json.tpl" {
+		t.Errorf("Expected child ResourcePolicyTemplate, got %s", result.ResourcePolicyTemplate)
+	}
+	if result.ResourcePolicyJSON != "" {
+		t.Error("ResourcePolicyJSON should be cleared when ResourcePolicyTemplate is set")
+	}
+}
+
+// TestMergeScenarioWithResourcePolicyJSON tests ResourcePolicyJSON merging
+func TestMergeScenarioWithResourcePolicyJSON(t *testing.T) {
+	parent := Scenario{
+		ResourcePolicyTemplate: "parent.json.tpl",
+	}
+	child := Scenario{
+		ResourcePolicyJSON: "child.json",
+	}
+
+	result := mergeScenario(parent, child)
+
+	if result.ResourcePolicyJSON != "child.json" {
+		t.Errorf("Expected child ResourcePolicyJSON, got %s", result.ResourcePolicyJSON)
+	}
+	if result.ResourcePolicyTemplate != "" {
+		t.Error("ResourcePolicyTemplate should be cleared when ResourcePolicyJSON is set")
+	}
+}
+
+// TestMergeScenarioWithPolicyTemplate tests PolicyTemplate merging clears PolicyJSON
+func TestMergeScenarioWithPolicyTemplate(t *testing.T) {
+	parent := Scenario{
+		PolicyJSON: "parent.json",
+	}
+	child := Scenario{
+		PolicyTemplate: "child.json.tpl",
+	}
+
+	result := mergeScenario(parent, child)
+
+	if result.PolicyTemplate != "child.json.tpl" {
+		t.Errorf("Expected child PolicyTemplate, got %s", result.PolicyTemplate)
+	}
+	if result.PolicyJSON != "" {
+		t.Error("PolicyJSON should be cleared when PolicyTemplate is set")
+	}
+}
+
+// TestExpandGlobsRelativeNoMatches tests expandGlobsRelative with no matches
+func TestExpandGlobsRelativeNoMatches(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// No files exist, glob should return empty
+	result := expandGlobsRelative(tmpDir, []string{"*.nonexistent"})
+
+	if len(result) != 0 {
+		t.Errorf("Expected 0 files, got %d", len(result))
+	}
+}
+
+// TestMergeSCPFilesWithMultipleStatements tests merging multiple SCP files
+func TestMergeSCPFilesWithMultipleStatements(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create SCP files with multiple statements each
+	scp1 := filepath.Join(tmpDir, "scp1.json")
+	scp1Content := `{
+		"Version": "2012-10-17",
+		"Statement": [
+			{"Effect": "Allow", "Action": "s3:GetObject", "Resource": "*"},
+			{"Effect": "Deny", "Action": "s3:DeleteObject", "Resource": "*"}
+		]
+	}`
+	if err := os.WriteFile(scp1, []byte(scp1Content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scp2 := filepath.Join(tmpDir, "scp2.json")
+	scp2Content := `{
+		"Version": "2012-10-17",
+		"Statement": [
+			{"Effect": "Allow", "Action": "ec2:*", "Resource": "*"}
+		]
+	}`
+	if err := os.WriteFile(scp2, []byte(scp2Content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	policy := mergeSCPFiles([]string{scp1, scp2})
+
+	// Should merge all statements from both files
+	statements, ok := policy["Statement"].([]any)
+	if !ok {
+		t.Fatal("Statement field is not an array")
+	}
+	if len(statements) != 3 {
+		t.Errorf("Expected 3 statements, got %d", len(statements))
+	}
+}
+
+// TestRunTestCollectionWithResources tests test with Resources array (not Resource)
+func TestRunTestCollectionWithResources(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	var capturedInput *iam.SimulateCustomPolicyInput
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			capturedInput = params
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+					},
+				},
+			}, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		Tests: []TestCase{
+			{
+				Action: "s3:GetObject",
+				Resources: []string{
+					"arn:aws:s3:::bucket1/*",
+					"arn:aws:s3:::bucket2/*",
+				},
+				Expect: "allowed",
+			},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+
+	// Verify Resources array was used
+	if capturedInput == nil || len(capturedInput.ResourceArns) != 2 {
+		t.Errorf("Expected 2 resource ARNs, got %d", len(capturedInput.ResourceArns))
+	}
+}
+
+// TestRunLegacyFormatWithMatchedStatements tests the matched statements display
+func TestRunLegacyFormatWithMatchedStatements(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	sourcePolicy := "policy-1"
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+						MatchedStatements: []types.Statement{
+							{
+								SourcePolicyId: &sourcePolicy,
+							},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	scen := &Scenario{
+		Actions:   []string{action},
+		Resources: []string{"arn:aws:s3:::bucket/*"},
+		Expect: map[string]string{
+			action: "allowed",
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	runLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+
+	// Should not have exited
+	if mockExit.called {
+		t.Error("runLegacyFormat() should not exit when expectation passes")
+	}
+}
+
+// TestRunTestCollectionWithMatchedStatements tests the matched statements display in test collection
+func TestRunTestCollectionWithMatchedStatements(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	sourcePolicy := "policy-1"
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+						MatchedStatements: []types.Statement{
+							{
+								SourcePolicyId: &sourcePolicy,
+							},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		Tests: []TestCase{
+			{
+				Action:   "s3:GetObject",
+				Resource: "arn:aws:s3:::bucket/*",
+				Expect:   "allowed",
+			},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+
+	// Should not have exited
+	if mockExit.called {
+		t.Error("runTestCollection() should not exit when all tests pass")
+	}
+}
+
+// TestRunTestCollectionFailureWithUnnamedTest tests failure path with unnamed test
+func TestRunTestCollectionFailureWithUnnamedTest(t *testing.T) {
+	originalExiter := exiter
+	defer func() { exiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	exiter = mockExit
+
+	action := "s3:GetObject"
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeExplicitDeny,
+					},
+				},
+			}, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		Tests: []TestCase{
+			{
+				// No Name field - should use default format
+				Action:   "s3:GetObject",
+				Resource: "arn:aws:s3:::bucket/*",
+				Expect:   "allowed",
+			},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Deny","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	runTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+
+	// Should have exited with code 2
+	if !mockExit.called || mockExit.exitCode != 2 {
+		t.Errorf("Expected exit code 2, got called=%v code=%d", mockExit.called, mockExit.exitCode)
+	}
+}
+
+// TestMergeScenarioVarsInitialization tests that Vars map is initialized if nil
+func TestMergeScenarioVarsInitialization(t *testing.T) {
+	parent := Scenario{
+		// Vars is nil
+	}
+	child := Scenario{
+		Vars: map[string]any{
+			"key": "value",
+		},
+	}
+
+	result := mergeScenario(parent, child)
+
+	if result.Vars == nil {
+		t.Error("Vars should be initialized")
+	}
+	if result.Vars["key"] != "value" {
+		t.Error("Child var should be present")
+	}
+}
