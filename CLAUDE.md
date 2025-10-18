@@ -60,7 +60,7 @@ cd test && bash run-tests.sh
 ├── lefthook.yml               # Pre-commit hooks (fmt, vet, staticcheck, test)
 ├── .github/workflows/ci.yml   # Full CI/CD with semantic-release
 ├── test/
-│   ├── scenarios/*.yml        # 9 integration test scenarios (7 legacy + 2 collection format)
+│   ├── scenarios/*.yml        # 11 integration test scenarios (7 legacy + 4 collection format)
 │   ├── policies/*.json        # Test IAM policies
 │   ├── scp/*.json             # Service Control Policies
 │   ├── rcp/*.json             # Resource Control Policies
@@ -209,13 +209,82 @@ tests:
 ```
 
 **Key differences:**
-- Collection format provides descriptive test names
+- Collection format provides descriptive test names (optional)
+- Test names are optional - omit for auto-generated "action on resource" format
 - Each test can have different resources
 - Tests can have individual context conditions
 - Better output showing which specific test failed
 - Easier to understand test intent
 
+**Optional test names:**
+```yaml
+tests:
+  # Named test
+  - name: "GetObject should be allowed"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "allowed"
+
+  # Unnamed test - displays as "s3:PutObject on arn:aws:s3:::bucket/*"
+  - action: "s3:PutObject"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "allowed"
+```
+
+Failure output format:
+- Named tests: `✗ FAIL: expected allowed, got implicitDeny (matched: ...)`
+- Unnamed tests: `✗ FAIL: s3:GetObject on arn:aws:s3:::bucket/* failed: expected allowed, got implicitDeny`
+
 Run tests: `cd test && bash run-tests.sh`
+
+### Using Context Conditions
+
+Context conditions allow testing policies with IAM condition keys:
+
+```yaml
+policy_json: "../policies/policy-with-conditions.json"
+
+tests:
+  - name: "Access allowed from trusted IP"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::secure-bucket/*"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["10.0.1.50"]
+    expect: "allowed"
+
+  - name: "Access denied from untrusted IP"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::secure-bucket/*"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["192.168.1.1"]
+    expect: "implicitDeny"
+
+  # Multiple context keys
+  - action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::secure-bucket/*"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Engineering"]
+    expect: "allowed"
+```
+
+**Supported context types:**
+- `string` - Single string value
+- `stringList` - Multiple string values
+- `numeric` - Numeric value
+- `numericList` - Multiple numeric values
+- `boolean` - Boolean value (true/false)
+- `booleanList` - Multiple boolean values
+
+**Note:** AWS SimulateCustomPolicy has limitations in condition evaluation. Some complex conditions may not evaluate as expected in simulation.
 
 ### Using Template Variables
 

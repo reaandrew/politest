@@ -24,7 +24,7 @@ pre-commit:
     trailing-whitespace:
       glob: "*"
       run: |
-        if grep -rn '[[:blank:]]$' {staged_files}; then
+        if grep -rIn '[[:blank:]]$' {staged_files} 2>/dev/null | grep -v "Binary file"; then
           echo "Error: Trailing whitespace found"
           exit 1
         fi

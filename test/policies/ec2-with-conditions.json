@@ -1,0 +1,39 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowEC2ForSpecificInstanceTypes",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:*:*:instance/*",
+      "Condition": {
+        "StringLike": {
+          "ec2:InstanceType": [
+            "t2.*",
+            "t3.*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "AllowTerminateWithRequesterTag",
+      "Effect": "Allow",
+      "Action": "ec2:TerminateInstances",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": [
+            "us-east-1",
+            "us-west-2"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "AllowDescribeInAllRegions",
+      "Effect": "Allow",
+      "Action": "ec2:DescribeInstances",
+      "Resource": "*"
+    }
+  ]
+}

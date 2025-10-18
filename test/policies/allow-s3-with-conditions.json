@@ -1,0 +1,41 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowS3WithIPCondition",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::secure-bucket/*",
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "10.0.0.0/8"
+        }
+      }
+    },
+    {
+      "Sid": "AllowS3WithMFACondition",
+      "Effect": "Allow",
+      "Action": "s3:DeleteObject",
+      "Resource": "arn:aws:s3:::secure-bucket/*",
+      "Condition": {
+        "Bool": {
+          "aws:MultiFactorAuthPresent": "true"
+        }
+      }
+    },
+    {
+      "Sid": "AllowS3WithTagCondition",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::secure-bucket",
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalTag/Department": "Engineering"
+        }
+      }
+    }
+  ]
+}

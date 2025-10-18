@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/logo.png" alt="politest logo" width="200"/>
+</p>
+
 # politest
 
 A single-binary Go tool for testing AWS IAM policies using scenario-based YAML configurations.

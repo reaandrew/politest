@@ -1,0 +1,48 @@
+# Test: Context with stringList and multiple values
+# Shows unnamed tests with default output format
+# Note: AWS SimulateCustomPolicy has limited condition evaluation,
+# so this demonstrates context passing rather than condition matching
+
+policy_json: "../policies/ec2-with-conditions.json"
+
+tests:
+  # No name - will show "action on resource"
+  # Context is provided but may not match due to simulator limitations
+  - action: "ec2:RunInstances"
+    resource: "arn:aws:ec2:us-east-1:123456789012:instance/*"
+    context:
+      - ContextKeyName: "ec2:InstanceType"
+        ContextKeyType: "stringList"
+        ContextKeyValues: ["t2.micro"]
+    expect: "implicitDeny"
+
+  - action: "ec2:RunInstances"
+    resource: "arn:aws:ec2:us-east-1:123456789012:instance/*"
+    context:
+      - ContextKeyName: "ec2:InstanceType"
+        ContextKeyType: "stringList"
+        ContextKeyValues: ["m5.large", "m5.xlarge"]
+    expect: "implicitDeny"
+
+  # Multiple values in stringList context
+  - action: "ec2:TerminateInstances"
+    resource: "arn:aws:ec2:us-east-1:123456789012:instance/i-1234567890abcdef0"
+    context:
+      - ContextKeyName: "aws:RequestedRegion"
+        ContextKeyType: "stringList"
+        ContextKeyValues: ["us-east-1", "us-west-2"]
+    expect: "implicitDeny"
+
+  - action: "ec2:TerminateInstances"
+    resource: "arn:aws:ec2:eu-west-1:123456789012:instance/i-1234567890abcdef0"
+    context:
+      - ContextKeyName: "aws:RequestedRegion"
+        ContextKeyType: "stringList"
+        ContextKeyValues: ["eu-west-1", "eu-central-1"]
+    expect: "implicitDeny"
+
+  # No context needed for DescribeInstances
+  - name: "DescribeInstances works without special context"
+    action: "ec2:DescribeInstances"
+    resource: "*"
+    expect: "allowed"

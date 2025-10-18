@@ -204,8 +204,6 @@ func runTestCollection(client *iam.Client, scen *Scenario, policyJSON, pbJSON st
 	fmt.Printf("Running %d test(s)...\n\n", len(scen.Tests))
 
 	for i, test := range scen.Tests {
-		fmt.Printf("[%d/%d] %s\n", i+1, len(scen.Tests), test.Name)
-
 		// Determine resources for this test
 		var resources []string
 		if test.Resource != "" {
@@ -216,6 +214,19 @@ func runTestCollection(client *iam.Client, scen *Scenario, policyJSON, pbJSON st
 
 		// Render action
 		action := renderString(test.Action, allVars)
+
+		// Generate test name if not provided
+		testName := test.Name
+		if testName == "" {
+			// Default format: "action on resource"
+			resourceStr := "*"
+			if len(resources) > 0 {
+				resourceStr = resources[0]
+			}
+			testName = fmt.Sprintf("%s on %s", action, resourceStr)
+		}
+
+		fmt.Printf("[%d/%d] %s\n", i+1, len(scen.Tests), testName)
 
 		// Merge context: scenario-level + test-level
 		ctxEntries := renderContext(scen.Context, allVars)
@@ -269,7 +280,17 @@ func runTestCollection(client *iam.Client, scen *Scenario, policyJSON, pbJSON st
 				fmt.Printf("  ✓ PASS: %s (matched: %s)\n\n", decision, detail)
 				passCount++
 			} else {
-				fmt.Printf("  ✗ FAIL: expected %s, got %s (matched: %s)\n\n", test.Expect, decision, detail)
+				// Format failure message
+				if test.Name == "" {
+					// Standard format: "action on resource failed: expected X, got Y"
+					resourceStr := "*"
+					if len(resources) > 0 {
+						resourceStr = resources[0]
+					}
+					fmt.Printf("  ✗ FAIL: %s on %s failed: expected %s, got %s\n\n", action, resourceStr, test.Expect, decision)
+				} else {
+					fmt.Printf("  ✗ FAIL: expected %s, got %s (matched: %s)\n\n", test.Expect, decision, detail)
+				}
 				failCount++
 			}
 		} else {

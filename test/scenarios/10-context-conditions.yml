@@ -1,0 +1,69 @@
+# Test: Context conditions with IP address, MFA, and principal tags
+# Demonstrates both named and unnamed tests with various context types
+
+policy_json: "../policies/allow-s3-with-conditions.json"
+
+tests:
+  # IP address condition tests
+  - name: "GetObject allowed from trusted IP range"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::secure-bucket/data.txt"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["10.0.1.50"]
+    expect: "allowed"
+
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::secure-bucket/data.txt"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["192.168.1.1"]
+    expect: "implicitDeny"
+
+  # MFA condition tests
+  - name: "DeleteObject allowed with MFA present"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::secure-bucket/data.txt"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+    expect: "allowed"
+
+  - action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::secure-bucket/data.txt"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["false"]
+    expect: "implicitDeny"
+
+  # Principal tag condition tests
+  - name: "ListBucket allowed for Engineering department"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::secure-bucket"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Engineering"]
+    expect: "allowed"
+
+  - action: "s3:ListBucket"
+    resource: "arn:aws:s3:::secure-bucket"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Marketing"]
+    expect: "implicitDeny"
+
+  # Multiple context keys
+  - name: "PutObject requires both IP and proper context"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::secure-bucket/upload.txt"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["10.0.2.100"]
+    expect: "allowed"
