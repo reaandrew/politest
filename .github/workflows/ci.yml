@@ -132,6 +132,7 @@ jobs:
         name: coverage-reports
 
     - name: SonarCloud Scan
+      id: sonar-scan
       uses: SonarSource/sonarqube-scan-action@master
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -141,7 +142,7 @@ jobs:
           -Dsonar.qualitygate.wait=false
 
     - name: Check Quality Gate Status
-      if: success() || failure()
+      if: success()
       timeout-minutes: 5
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
