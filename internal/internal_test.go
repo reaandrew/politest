@@ -1327,7 +1327,7 @@ func TestRunLegacyFormatIntegration(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat
-	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, Variables: allVars})
 
 	// Should not have exited
 	if mockExit.called {
@@ -1371,7 +1371,7 @@ func TestRunLegacyFormatWithFailure(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat
-	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, Variables: allVars})
 
 	// Should have exited with code 2
 	if !mockExit.called {
@@ -1418,7 +1418,11 @@ func TestRunLegacyFormatWithNoAssert(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat with noAssert=true
-	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", true)
+	RunLegacyFormat(mockClient, scen, SimulatorConfig{
+		PolicyJSON: policyJSON,
+		Variables:  allVars,
+		NoAssert:   true,
+	})
 
 	// Should NOT have exited
 	if mockExit.called {
@@ -1463,7 +1467,7 @@ func TestRunLegacyFormatWithPermissionsBoundary(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat with permissions boundary
-	RunLegacyFormat(mockClient, scen, policyJSON, pbJSON, "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, PermissionsBoundary: pbJSON, Variables: allVars})
 
 	// Verify permissions boundary was passed
 	if capturedInput == nil {
@@ -1519,7 +1523,7 @@ func TestRunTestCollectionIntegration(t *testing.T) {
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
 
 	// Call runTestCollection
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Should not have exited (all tests passed)
 	if mockExit.called {
@@ -1567,7 +1571,7 @@ func TestRunTestCollectionWithFailure(t *testing.T) {
 
 	// Call runTestCollection
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Should have exited with code 2 (test failed)
 	if !mockExit.called {
@@ -1626,7 +1630,7 @@ func TestRunTestCollectionMultipleTests(t *testing.T) {
 
 	// Call runTestCollection
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Should have called SimulateCustomPolicy twice
 	if callCount != 2 {
@@ -1691,7 +1695,7 @@ func TestRunTestCollectionWithResourcePolicy(t *testing.T) {
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
 
 	// Call runTestCollection
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Verify resource policy was passed
 	if capturedInput.ResourcePolicy == nil {
@@ -1747,7 +1751,7 @@ func TestRunTestCollectionWithContext(t *testing.T) {
 
 	// Call runTestCollection
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Verify both scenario-level and test-level context were merged
 	if len(capturedInput.ContextEntries) != 2 {
@@ -1797,7 +1801,11 @@ func TestRunLegacyFormatWithResourcePolicy(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat with resource policy and other options
-	RunLegacyFormat(mockClient, scen, policyJSON, "", resourcePolicy, allVars, "", false)
+	RunLegacyFormat(mockClient, scen, SimulatorConfig{
+		PolicyJSON:         policyJSON,
+		ResourcePolicyJSON: resourcePolicy,
+		Variables:          allVars,
+	})
 
 	// Verify all parameters were passed
 	if capturedInput.ResourcePolicy == nil || *capturedInput.ResourcePolicy != resourcePolicy {
@@ -1926,7 +1934,12 @@ func TestRunTestCollectionWithSaveFile(t *testing.T) {
 	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
 
 	// Call runTestCollection with save file
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, saveFile, false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{
+		PolicyJSON:   policyJSON,
+		ScenarioPath: scenarioPath,
+		Variables:    allVars,
+		SavePath:     saveFile,
+	})
 
 	// Verify save file was created
 	if _, err := os.Stat(saveFile); os.IsNotExist(err) {
@@ -1968,7 +1981,7 @@ func TestRunLegacyFormatWithSaveFile(t *testing.T) {
 	allVars := map[string]any{}
 
 	// Call runLegacyFormat with save file
-	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, saveFile, false)
+	RunLegacyFormat(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, Variables: allVars, SavePath: saveFile})
 
 	// Verify save file was created
 	if _, err := os.Stat(saveFile); os.IsNotExist(err) {
@@ -2018,7 +2031,7 @@ func TestRunTestCollectionWithCallerArnOverride(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Verify test-level CallerArn was used
 	if capturedInput == nil || capturedInput.CallerArn == nil {
@@ -2071,7 +2084,7 @@ func TestRunTestCollectionWithResourceOwnerOverride(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Verify test-level ResourceOwner was used
 	if capturedInput == nil || capturedInput.ResourceOwner == nil {
@@ -2124,7 +2137,7 @@ func TestRunTestCollectionWithResourceHandlingOptionOverride(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Verify test-level ResourceHandlingOption was used
 	if capturedInput == nil || capturedInput.ResourceHandlingOption == nil {
@@ -2243,7 +2256,7 @@ func TestRunLegacyFormatWithCallerArn(t *testing.T) {
 		"account": "123456789012",
 	}
 
-	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, Variables: allVars})
 
 	// Verify CallerArn was rendered and set
 	if capturedInput == nil || capturedInput.CallerArn == nil {
@@ -2289,7 +2302,7 @@ func TestRunLegacyFormatWithResourceOwner(t *testing.T) {
 		"account": "123456789012",
 	}
 
-	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, Variables: allVars})
 
 	// Verify ResourceOwner was rendered and set
 	if capturedInput == nil || capturedInput.ResourceOwner == nil {
@@ -2333,7 +2346,7 @@ func TestRunLegacyFormatWithResourceHandlingOption(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, Variables: allVars})
 
 	// Verify ResourceHandlingOption was set
 	if capturedInput == nil || capturedInput.ResourceHandlingOption == nil {
@@ -2382,7 +2395,7 @@ func TestRunTestCollectionNoExpectation(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Should not have exited
 	if mockExit.called {
@@ -2429,7 +2442,7 @@ func TestRunTestCollectionNamedTestFailure(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Deny","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Should have exited with code 2
 	if !mockExit.called || mockExit.exitCode != 2 {
@@ -2641,7 +2654,7 @@ func TestRunTestCollectionWithResources(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Verify Resources array was used
 	if capturedInput == nil || len(capturedInput.ResourceArns) != 2 {
@@ -2688,7 +2701,7 @@ func TestRunLegacyFormatWithMatchedStatements(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	RunLegacyFormat(mockClient, scen, policyJSON, "", "", allVars, "", false)
+	RunLegacyFormat(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, Variables: allVars})
 
 	// Should not have exited
 	if mockExit.called {
@@ -2740,7 +2753,7 @@ func TestRunTestCollectionWithMatchedStatements(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Should not have exited
 	if mockExit.called {
@@ -2787,7 +2800,7 @@ func TestRunTestCollectionFailureWithUnnamedTest(t *testing.T) {
 	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Deny","Action":"s3:*","Resource":"*"}]}`
 	allVars := map[string]any{}
 
-	RunTestCollection(mockClient, scen, policyJSON, "", "", scenarioPath, allVars, "", false)
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
 
 	// Should have exited with code 2
 	if !mockExit.called || mockExit.exitCode != 2 {

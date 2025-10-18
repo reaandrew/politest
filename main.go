@@ -93,16 +93,27 @@ func main() {
 	}
 
 	// AWS client setup
-	cfg, err := config.LoadDefaultConfig(context.Background())
+	awsCfg, err := config.LoadDefaultConfig(context.Background())
 	internal.Check(err)
-	client := iam.NewFromConfig(cfg)
+	client := iam.NewFromConfig(awsCfg)
+
+	// Build simulator configuration
+	simCfg := internal.SimulatorConfig{
+		PolicyJSON:          policyJSON,
+		PermissionsBoundary: pbJSON,
+		ResourcePolicyJSON:  resourcePolicyJSON,
+		ScenarioPath:        absScenario,
+		Variables:           allVars,
+		SavePath:            savePath,
+		NoAssert:            noAssert,
+	}
 
 	// Determine format and run tests
 	if len(scen.Tests) > 0 {
 		// New format: collection of named tests
-		internal.RunTestCollection(client, scen, policyJSON, pbJSON, resourcePolicyJSON, absScenario, allVars, savePath, noAssert)
+		internal.RunTestCollection(client, scen, simCfg)
 	} else {
 		// Legacy format: actions + resources + expect map
-		internal.RunLegacyFormat(client, scen, policyJSON, pbJSON, resourcePolicyJSON, allVars, savePath, noAssert)
+		internal.RunLegacyFormat(client, scen, simCfg)
 	}
 }

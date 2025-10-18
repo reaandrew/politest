@@ -41,3 +41,14 @@ type ContextEntryYml struct {
 	ContextKeyValues []string `yaml:"ContextKeyValues"`
 	ContextKeyType   string   `yaml:"ContextKeyType"` // string, stringList, numeric, etc.
 }
+
+// SimulatorConfig holds configuration for running policy simulations
+type SimulatorConfig struct {
+	PolicyJSON          string
+	PermissionsBoundary string
+	ResourcePolicyJSON  string
+	ScenarioPath        string // Only used by RunTestCollection
+	Variables           map[string]any
+	SavePath            string
+	NoAssert            bool
+}

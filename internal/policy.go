@@ -43,11 +43,11 @@ func MergeSCPFiles(files []string) map[string]any {
 		switch t := doc.(type) {
 		case map[string]any:
 			if st, ok := t["Statement"]; ok {
-				switch sv := st.(type) {
-				case []any:
-					statements = append(statements, sv...)
-				default:
-					statements = append(statements, sv)
+				// Extract statements from policy document
+				if stmtArray, ok := st.([]any); ok {
+					statements = append(statements, stmtArray...)
+				} else {
+					statements = append(statements, st)
 				}
 			} else {
 				// assume it's a single statement object

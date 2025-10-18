@@ -31,6 +31,16 @@ func LoadScenarioWithExtends(absPath string) (*Scenario, error) {
 func MergeScenario(a, b Scenario) Scenario {
 	// simple field-wise merge: b overrides a; maps deep-merged
 	out := a
+	mergePolicyFields(&out, b)
+	mergeSliceFields(&out, b)
+	mergeMapFields(&out, b)
+	mergeResourcePolicyFields(&out, b)
+	mergeSimulationFields(&out, b)
+	return out
+}
+
+// mergePolicyFields merges policy-related fields from b into out
+func mergePolicyFields(out *Scenario, b Scenario) {
 	if b.VarsFile != "" {
 		out.VarsFile = b.VarsFile
 	}
@@ -45,6 +55,10 @@ func MergeScenario(a, b Scenario) Scenario {
 	if len(b.SCPPaths) > 0 {
 		out.SCPPaths = b.SCPPaths
 	}
+}
+
+// mergeSliceFields merges slice-based fields from b into out
+func mergeSliceFields(out *Scenario, b Scenario) {
 	if len(b.Actions) > 0 {
 		out.Actions = b.Actions
 	}
@@ -57,6 +71,10 @@ func MergeScenario(a, b Scenario) Scenario {
 	if len(b.Tests) > 0 {
 		out.Tests = b.Tests
 	}
+}
+
+// mergeMapFields merges map-based fields from b into out
+func mergeMapFields(out *Scenario, b Scenario) {
 	if len(b.Expect) > 0 {
 		if out.Expect == nil {
 			out.Expect = map[string]string{}
@@ -71,7 +89,10 @@ func MergeScenario(a, b Scenario) Scenario {
 	for k, v := range b.Vars {
 		out.Vars[k] = v
 	}
-	// Resource policy fields
+}
+
+// mergeResourcePolicyFields merges resource policy fields from b into out
+func mergeResourcePolicyFields(out *Scenario, b Scenario) {
 	if b.ResourcePolicyTemplate != "" {
 		out.ResourcePolicyTemplate = b.ResourcePolicyTemplate
 		out.ResourcePolicyJSON = ""
@@ -80,6 +101,10 @@ func MergeScenario(a, b Scenario) Scenario {
 		out.ResourcePolicyJSON = b.ResourcePolicyJSON
 		out.ResourcePolicyTemplate = ""
 	}
+}
+
+// mergeSimulationFields merges simulation-related fields from b into out
+func mergeSimulationFields(out *Scenario, b Scenario) {
 	if b.CallerArn != "" {
 		out.CallerArn = b.CallerArn
 	}
@@ -89,7 +114,6 @@ func MergeScenario(a, b Scenario) Scenario {
 	if b.ResourceHandlingOption != "" {
 		out.ResourceHandlingOption = b.ResourceHandlingOption
 	}
-	return out
 }
 
 // LoadYAML loads and unmarshals a YAML file

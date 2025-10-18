@@ -9,76 +9,104 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 )
 
 // RunLegacyFormat executes policy simulation in legacy format (actions + resources + expect map)
-func RunLegacyFormat(client IAMSimulator, scen *Scenario, policyJSON, pbJSON, resourcePolicyJSON string, allVars map[string]any, savePath string, noAssert bool) {
+func RunLegacyFormat(client IAMSimulator, scen *Scenario, cfg SimulatorConfig) {
 	// Render actions/resources/context with Go templates
-	actions := RenderStringSlice(scen.Actions, allVars)
-	resources := RenderStringSlice(scen.Resources, allVars)
-	ctxEntries := RenderContext(scen.Context, allVars)
+	actions := RenderStringSlice(scen.Actions, cfg.Variables)
+	resources := RenderStringSlice(scen.Resources, cfg.Variables)
+	ctxEntries := RenderContext(scen.Context, cfg.Variables)
 
-	// AWS call
+	// Build and execute AWS API call
+	input := buildSimulateInput(cfg, scen, actions, resources, ctxEntries)
+	resp, err := client.SimulateCustomPolicy(context.Background(), input)
+	Check(err)
+
+	// Process and display results
+	evals := processAndDisplayResults(resp)
+
+	// Save raw JSON if requested
+	saveResponseIfRequested(cfg.SavePath, resp)
+
+	// Check expectations and handle failures
+	checkExpectationsAndExit(scen.Expect, evals, cfg.NoAssert)
+}
+
+// buildSimulateInput creates the IAM simulation input from scenario and config
+func buildSimulateInput(cfg SimulatorConfig, scen *Scenario, actions, resources []string, ctxEntries []types.ContextEntry) *iam.SimulateCustomPolicyInput {
 	input := &iam.SimulateCustomPolicyInput{
-		PolicyInputList: []string{policyJSON},
+		PolicyInputList: []string{cfg.PolicyJSON},
 		ActionNames:     actions,
 		ResourceArns:    resources,
 		ContextEntries:  ctxEntries,
 	}
-	if pbJSON != "" {
-		input.PermissionsBoundaryPolicyInputList = []string{pbJSON}
+	if cfg.PermissionsBoundary != "" {
+		input.PermissionsBoundaryPolicyInputList = []string{cfg.PermissionsBoundary}
 	}
-	if resourcePolicyJSON != "" {
-		input.ResourcePolicy = &resourcePolicyJSON
+	if cfg.ResourcePolicyJSON != "" {
+		input.ResourcePolicy = &cfg.ResourcePolicyJSON
 	}
 	if scen.CallerArn != "" {
-		rendered := RenderString(scen.CallerArn, allVars)
+		rendered := RenderString(scen.CallerArn, cfg.Variables)
 		input.CallerArn = &rendered
 	}
 	if scen.ResourceOwner != "" {
-		rendered := RenderString(scen.ResourceOwner, allVars)
+		rendered := RenderString(scen.ResourceOwner, cfg.Variables)
 		input.ResourceOwner = &rendered
 	}
 	if scen.ResourceHandlingOption != "" {
 		input.ResourceHandlingOption = &scen.ResourceHandlingOption
 	}
+	return input
+}
 
-	resp, err := client.SimulateCustomPolicy(context.Background(), input)
-	Check(err)
-
-	// Print table
+// processAndDisplayResults processes evaluation results and displays them in a table
+func processAndDisplayResults(resp *iam.SimulateCustomPolicyOutput) map[string]string {
 	rows := make([][3]string, 0, len(resp.EvaluationResults))
 	evals := map[string]string{}
 	for _, r := range resp.EvaluationResults {
 		act := AwsString(r.EvalActionName)
 		dec := string(r.EvalDecision)
 		evals[act] = dec
-		detail := "-"
-		if len(r.MatchedStatements) > 0 {
-			parts := make([]string, 0, len(r.MatchedStatements))
-			for _, m := range r.MatchedStatements {
-				if m.SourcePolicyId != nil {
-					parts = append(parts, AwsString(m.SourcePolicyId))
-				}
-			}
-			if len(parts) > 0 {
-				detail = strings.Join(parts, ",")
-			}
-		}
+		detail := extractMatchedStatements(r.MatchedStatements)
 		rows = append(rows, [3]string{act, dec, detail})
 	}
 	PrintTable(rows)
+	return evals
+}
 
-	// Save raw JSON if requested
+// extractMatchedStatements extracts source policy IDs from matched statements
+func extractMatchedStatements(matched []types.Statement) string {
+	if len(matched) == 0 {
+		return "-"
+	}
+	parts := make([]string, 0, len(matched))
+	for _, m := range matched {
+		if m.SourcePolicyId != nil {
+			parts = append(parts, AwsString(m.SourcePolicyId))
+		}
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, ",")
+	}
+	return "-"
+}
+
+// saveResponseIfRequested saves the API response to a file if savePath is provided
+func saveResponseIfRequested(savePath string, resp any) {
 	if savePath != "" {
 		b, _ := json.MarshalIndent(resp, "", "  ")
 		Check(os.WriteFile(savePath, b, 0o644))
 		fmt.Printf("\nSaved raw response → %s\n", savePath)
 	}
+}
 
-	// Expectations
+// checkExpectationsAndExit checks expectations against actual results and exits on failures
+func checkExpectationsAndExit(expect map[string]string, evals map[string]string, noAssert bool) {
 	failures := [][3]string{}
-	for action, want := range scen.Expect {
+	for action, want := range expect {
 		got := evals[action]
 		if !strings.EqualFold(got, want) {
 			failures = append(failures, [3]string{action, want, got})
@@ -94,7 +122,7 @@ func RunLegacyFormat(client IAMSimulator, scen *Scenario, policyJSON, pbJSON, re
 }
 
 // RunTestCollection executes policy simulation in test collection format
-func RunTestCollection(client IAMSimulator, scen *Scenario, policyJSON, pbJSON, resourcePolicyJSON, absScenario string, allVars map[string]any, savePath string, noAssert bool) {
+func RunTestCollection(client IAMSimulator, scen *Scenario, cfg SimulatorConfig) {
 	passCount := 0
 	failCount := 0
 	var allResponses []*iam.SimulateCustomPolicyOutput
@@ -102,163 +130,189 @@ func RunTestCollection(client IAMSimulator, scen *Scenario, policyJSON, pbJSON, 
 	fmt.Printf("Running %d test(s)...\n\n", len(scen.Tests))
 
 	for i, test := range scen.Tests {
-		// Determine resources for this test
-		var resources []string
-		if test.Resource != "" {
-			resources = []string{RenderString(test.Resource, allVars)}
-		} else if len(test.Resources) > 0 {
-			resources = RenderStringSlice(test.Resources, allVars)
-		}
-
-		// Render action
-		action := RenderString(test.Action, allVars)
-
-		// Generate test name if not provided
-		testName := test.Name
-		if testName == "" {
-			// Default format: "action on resource"
-			resourceStr := "*"
-			if len(resources) > 0 {
-				resourceStr = resources[0]
-			}
-			testName = fmt.Sprintf("%s on %s", action, resourceStr)
-		}
-
-		fmt.Printf("[%d/%d] %s\n", i+1, len(scen.Tests), testName)
-
-		// Merge context: scenario-level + test-level
-		ctxEntries := RenderContext(scen.Context, allVars)
-		if len(test.Context) > 0 {
-			testCtx := RenderContext(test.Context, allVars)
-			ctxEntries = append(ctxEntries, testCtx...)
-		}
-
-		// Determine resource policy: test-level overrides scenario-level
-		testResourcePolicy := resourcePolicyJSON
-		switch {
-		case test.ResourcePolicyJSON != "" && test.ResourcePolicyTemplate != "":
-			Die("test %d: provide only one of 'resource_policy_json' or 'resource_policy_template'", i+1)
-		case test.ResourcePolicyJSON != "":
-			base := filepath.Dir(absScenario)
-			p := MustAbsJoin(base, test.ResourcePolicyJSON)
-			b, err := os.ReadFile(p)
-			Check(err)
-			testResourcePolicy = MinifyJSON(b)
-		case test.ResourcePolicyTemplate != "":
-			base := filepath.Dir(absScenario)
-			tplPath := MustAbsJoin(base, test.ResourcePolicyTemplate)
-			testResourcePolicy = RenderTemplateFileJSON(tplPath, allVars)
-		}
-
-		// AWS call
-		input := &iam.SimulateCustomPolicyInput{
-			PolicyInputList: []string{policyJSON},
-			ActionNames:     []string{action},
-			ResourceArns:    resources,
-			ContextEntries:  ctxEntries,
-		}
-		if pbJSON != "" {
-			input.PermissionsBoundaryPolicyInputList = []string{pbJSON}
-		}
-		if testResourcePolicy != "" {
-			input.ResourcePolicy = &testResourcePolicy
-		}
-
-		// Test-level overrides for caller ARN, resource owner, and handling option
-		callerArn := scen.CallerArn
-		if test.CallerArn != "" {
-			callerArn = test.CallerArn
-		}
-		if callerArn != "" {
-			rendered := RenderString(callerArn, allVars)
-			input.CallerArn = &rendered
-		}
-
-		resourceOwner := scen.ResourceOwner
-		if test.ResourceOwner != "" {
-			resourceOwner = test.ResourceOwner
-		}
-		if resourceOwner != "" {
-			rendered := RenderString(resourceOwner, allVars)
-			input.ResourceOwner = &rendered
-		}
-
-		resourceHandlingOption := scen.ResourceHandlingOption
-		if test.ResourceHandlingOption != "" {
-			resourceHandlingOption = test.ResourceHandlingOption
-		}
-		if resourceHandlingOption != "" {
-			input.ResourceHandlingOption = &resourceHandlingOption
-		}
-
-		resp, err := client.SimulateCustomPolicy(context.Background(), input)
-		Check(err)
+		pass, resp := runSingleTest(client, scen, cfg, test, i)
 		allResponses = append(allResponses, resp)
-
-		// Check result
-		if len(resp.EvaluationResults) == 0 {
-			fmt.Printf("  ✗ FAIL: no evaluation results returned\n\n")
-			failCount++
-			continue
-		}
-
-		result := resp.EvaluationResults[0]
-		decision := string(result.EvalDecision)
-
-		// Get matched statements for details
-		detail := "-"
-		if len(result.MatchedStatements) > 0 {
-			parts := make([]string, 0, len(result.MatchedStatements))
-			for _, m := range result.MatchedStatements {
-				if m.SourcePolicyId != nil {
-					parts = append(parts, AwsString(m.SourcePolicyId))
-				}
-			}
-			if len(parts) > 0 {
-				detail = strings.Join(parts, ",")
-			}
-		}
-
-		// Check expectation
-		if test.Expect != "" {
-			if strings.EqualFold(decision, test.Expect) {
-				fmt.Printf("  ✓ PASS: %s (matched: %s)\n\n", decision, detail)
-				passCount++
-			} else {
-				// Format failure message
-				if test.Name == "" {
-					// Standard format: "action on resource failed: expected X, got Y"
-					resourceStr := "*"
-					if len(resources) > 0 {
-						resourceStr = resources[0]
-					}
-					fmt.Printf("  ✗ FAIL: %s on %s failed: expected %s, got %s\n\n", action, resourceStr, test.Expect, decision)
-				} else {
-					fmt.Printf("  ✗ FAIL: expected %s, got %s (matched: %s)\n\n", test.Expect, decision, detail)
-				}
-				failCount++
-			}
-		} else {
-			// No expectation, just show result
-			fmt.Printf("  → Result: %s (matched: %s)\n\n", decision, detail)
+		if pass {
 			passCount++
+		} else {
+			failCount++
 		}
 	}
 
-	// Summary
+	printTestSummary(passCount, failCount)
+	saveResponseIfRequested(cfg.SavePath, allResponses)
+
+	if failCount > 0 && !cfg.NoAssert {
+		GlobalExiter.Exit(2)
+	}
+}
+
+// runSingleTest executes a single test case and returns pass/fail status and response
+func runSingleTest(client IAMSimulator, scen *Scenario, cfg SimulatorConfig, test TestCase, index int) (bool, *iam.SimulateCustomPolicyOutput) {
+	resources := prepareTestResources(test, cfg.Variables)
+	action := RenderString(test.Action, cfg.Variables)
+	testName := getTestName(test, action, resources)
+
+	fmt.Printf("[%d/%d] %s\n", index+1, len(scen.Tests), testName)
+
+	// Build test input
+	ctxEntries := mergeContextEntries(scen.Context, test.Context, cfg.Variables)
+	testResourcePolicy := resolveResourcePolicy(test, cfg, index)
+	input := buildTestInput(cfg, action, resources, ctxEntries, testResourcePolicy)
+	applyTestOverrides(input, scen, test, cfg.Variables)
+
+	// Execute test
+	resp, err := client.SimulateCustomPolicy(context.Background(), input)
+	Check(err)
+
+	// Evaluate result
+	pass := evaluateTestResult(resp, test, action, resources)
+	return pass, resp
+}
+
+// prepareTestResources determines and renders resources for a test
+func prepareTestResources(test TestCase, vars map[string]any) []string {
+	if test.Resource != "" {
+		return []string{RenderString(test.Resource, vars)}
+	}
+	if len(test.Resources) > 0 {
+		return RenderStringSlice(test.Resources, vars)
+	}
+	return nil
+}
+
+// getTestName generates a test name if not provided
+func getTestName(test TestCase, action string, resources []string) string {
+	if test.Name != "" {
+		return test.Name
+	}
+	resourceStr := "*"
+	if len(resources) > 0 {
+		resourceStr = resources[0]
+	}
+	return fmt.Sprintf("%s on %s", action, resourceStr)
+}
+
+// mergeContextEntries merges scenario-level and test-level context
+func mergeContextEntries(scenCtx, testCtx []ContextEntryYml, vars map[string]any) []types.ContextEntry {
+	ctxEntries := RenderContext(scenCtx, vars)
+	if len(testCtx) > 0 {
+		testCtxRendered := RenderContext(testCtx, vars)
+		ctxEntries = append(ctxEntries, testCtxRendered...)
+	}
+	return ctxEntries
+}
+
+// resolveResourcePolicy determines the resource policy for a test
+func resolveResourcePolicy(test TestCase, cfg SimulatorConfig, testIndex int) string {
+	testResourcePolicy := cfg.ResourcePolicyJSON
+	switch {
+	case test.ResourcePolicyJSON != "" && test.ResourcePolicyTemplate != "":
+		Die("test %d: provide only one of 'resource_policy_json' or 'resource_policy_template'", testIndex+1)
+	case test.ResourcePolicyJSON != "":
+		base := filepath.Dir(cfg.ScenarioPath)
+		p := MustAbsJoin(base, test.ResourcePolicyJSON)
+		b, err := os.ReadFile(p)
+		Check(err)
+		testResourcePolicy = MinifyJSON(b)
+	case test.ResourcePolicyTemplate != "":
+		base := filepath.Dir(cfg.ScenarioPath)
+		tplPath := MustAbsJoin(base, test.ResourcePolicyTemplate)
+		testResourcePolicy = RenderTemplateFileJSON(tplPath, cfg.Variables)
+	}
+	return testResourcePolicy
+}
+
+// buildTestInput creates the IAM simulation input for a single test
+func buildTestInput(cfg SimulatorConfig, action string, resources []string, ctxEntries []types.ContextEntry, resourcePolicy string) *iam.SimulateCustomPolicyInput {
+	input := &iam.SimulateCustomPolicyInput{
+		PolicyInputList: []string{cfg.PolicyJSON},
+		ActionNames:     []string{action},
+		ResourceArns:    resources,
+		ContextEntries:  ctxEntries,
+	}
+	if cfg.PermissionsBoundary != "" {
+		input.PermissionsBoundaryPolicyInputList = []string{cfg.PermissionsBoundary}
+	}
+	if resourcePolicy != "" {
+		input.ResourcePolicy = &resourcePolicy
+	}
+	return input
+}
+
+// applyTestOverrides applies test-level overrides to the simulation input
+func applyTestOverrides(input *iam.SimulateCustomPolicyInput, scen *Scenario, test TestCase, vars map[string]any) {
+	// Caller ARN
+	callerArn := scen.CallerArn
+	if test.CallerArn != "" {
+		callerArn = test.CallerArn
+	}
+	if callerArn != "" {
+		rendered := RenderString(callerArn, vars)
+		input.CallerArn = &rendered
+	}
+
+	// Resource Owner
+	resourceOwner := scen.ResourceOwner
+	if test.ResourceOwner != "" {
+		resourceOwner = test.ResourceOwner
+	}
+	if resourceOwner != "" {
+		rendered := RenderString(resourceOwner, vars)
+		input.ResourceOwner = &rendered
+	}
+
+	// Resource Handling Option
+	resourceHandlingOption := scen.ResourceHandlingOption
+	if test.ResourceHandlingOption != "" {
+		resourceHandlingOption = test.ResourceHandlingOption
+	}
+	if resourceHandlingOption != "" {
+		input.ResourceHandlingOption = &resourceHandlingOption
+	}
+}
+
+// evaluateTestResult checks the API response against expectations and prints result
+func evaluateTestResult(resp *iam.SimulateCustomPolicyOutput, test TestCase, action string, resources []string) bool {
+	if len(resp.EvaluationResults) == 0 {
+		fmt.Printf("  ✗ FAIL: no evaluation results returned\n\n")
+		return false
+	}
+
+	result := resp.EvaluationResults[0]
+	decision := string(result.EvalDecision)
+	detail := extractMatchedStatements(result.MatchedStatements)
+
+	if test.Expect == "" {
+		fmt.Printf("  → Result: %s (matched: %s)\n\n", decision, detail)
+		return true
+	}
+
+	if strings.EqualFold(decision, test.Expect) {
+		fmt.Printf("  ✓ PASS: %s (matched: %s)\n\n", decision, detail)
+		return true
+	}
+
+	printTestFailure(test, action, resources, decision, detail)
+	return false
+}
+
+// printTestFailure prints a formatted failure message
+func printTestFailure(test TestCase, action string, resources []string, decision, detail string) {
+	if test.Name == "" {
+		resourceStr := "*"
+		if len(resources) > 0 {
+			resourceStr = resources[0]
+		}
+		fmt.Printf("  ✗ FAIL: %s on %s failed: expected %s, got %s\n\n", action, resourceStr, test.Expect, decision)
+	} else {
+		fmt.Printf("  ✗ FAIL: expected %s, got %s (matched: %s)\n\n", test.Expect, decision, detail)
+	}
+}
+
+// printTestSummary prints the final test summary
+func printTestSummary(passCount, failCount int) {
 	fmt.Printf("========================================\n")
 	fmt.Printf("Test Results: %d passed, %d failed\n", passCount, failCount)
 	fmt.Printf("========================================\n")
-
-	// Save raw JSON if requested
-	if savePath != "" {
-		b, _ := json.MarshalIndent(allResponses, "", "  ")
-		Check(os.WriteFile(savePath, b, 0o644))
-		fmt.Printf("\nSaved raw responses → %s\n", savePath)
-	}
-
-	// Exit with error if any failures and not no-assert
-	if failCount > 0 && !noAssert {
-		GlobalExiter.Exit(2)
-	}
 }
