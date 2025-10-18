@@ -190,6 +190,9 @@ jobs:
           echo "Quality Gate status is null or empty. Analysis may not be complete."
           echo "Response: $response"
           exit 1
+        elif [ "$gate_status" = "NONE" ]; then
+          echo "No Quality Gate configured for this project - treating as pass"
+          echo "To configure a Quality Gate, visit: https://sonarcloud.io/project/quality_gate?id=$project_key"
         elif [ "$gate_status" != "OK" ]; then
           echo "Quality Gate failed for the following reasons:"
           echo "$response" | jq -r '.projectStatus.conditions[] | select(.status=="ERROR") | "- \(.metricKey): \(.actualValue) \(.comparator) \(.errorThreshold)"'
