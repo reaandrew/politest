@@ -1,0 +1,39 @@
+# Binaries
+politest
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test coverage
+coverage.out
+coverage.html
+*.test
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Secrets and environment
+.env
+.env.local
+*.pem
+*.key
+credentials.json
+secrets.yaml
