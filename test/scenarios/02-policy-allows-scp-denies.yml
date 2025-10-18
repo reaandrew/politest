@@ -1,5 +1,5 @@
 # Test: Policy allows S3, but SCP denies all S3
-# Expected: All S3 actions implicitDeny (SCP blocks)
+# Expected: All S3 actions explicitDeny (SCP explicitly blocks)
 
 policy_json: "../policies/allow-s3.json"
 
@@ -16,6 +16,6 @@ resources:
   - "arn:aws:s3:::test-bucket/*"
 
 expect:
-  "s3:GetObject": "implicitDeny"
-  "s3:PutObject": "implicitDeny"
-  "s3:ListBucket": "implicitDeny"
+  "s3:GetObject": "explicitDeny"
+  "s3:PutObject": "explicitDeny"
+  "s3:ListBucket": "explicitDeny"

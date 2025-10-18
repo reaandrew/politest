@@ -1,5 +1,5 @@
 # Test: Policy allows EC2, one SCP denies EC2, one SCP allows all
-# Expected: implicitDeny (all SCPs must allow)
+# Expected: explicitDeny (SCP explicitly denies, all SCPs must allow)
 
 policy_json: "../policies/allow-ec2.json"
 
@@ -15,5 +15,5 @@ resources:
   - "*"
 
 expect:
-  "ec2:DescribeInstances": "implicitDeny"
-  "ec2:StartInstances": "implicitDeny"
+  "ec2:DescribeInstances": "explicitDeny"
+  "ec2:StartInstances": "explicitDeny"
