@@ -2,8 +2,10 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -1304,5 +1306,230 @@ func TestRunTestCollectionFailureWithUnnamedTest(t *testing.T) {
 	// Should have exited with code 2
 	if !mockExit.called || mockExit.exitCode != 2 {
 		t.Errorf("Expected exit code 2, got called=%v code=%d", mockExit.called, mockExit.exitCode)
+	}
+}
+
+func TestMergeContextEntriesWithInvalidType(t *testing.T) {
+	// Save original exiter
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	// Set mock exiter
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	// Create context with invalid type
+	scenCtx := []ContextEntryYml{
+		{
+			ContextKeyName:   "aws:test",
+			ContextKeyValues: []string{"value"},
+			ContextKeyType:   "invalid_type",
+		},
+	}
+
+	vars := map[string]any{}
+
+	// This should trigger an error from ParseContextType
+	_, err := mergeContextEntries(scenCtx, nil, vars)
+
+	if err == nil {
+		t.Error("mergeContextEntries() should return error for invalid context type")
+	}
+}
+
+func TestMergeContextEntriesWithTestContextError(t *testing.T) {
+	// Save original exiter
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	// Set mock exiter
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	// Valid scenario context
+	scenCtx := []ContextEntryYml{
+		{
+			ContextKeyName:   "aws:test1",
+			ContextKeyValues: []string{"value1"},
+			ContextKeyType:   "string",
+		},
+	}
+
+	// Invalid test context
+	testCtx := []ContextEntryYml{
+		{
+			ContextKeyName:   "aws:test2",
+			ContextKeyValues: []string{"value2"},
+			ContextKeyType:   "invalid_type",
+		},
+	}
+
+	vars := map[string]any{}
+
+	// This should trigger an error from ParseContextType on test context
+	_, err := mergeContextEntries(scenCtx, testCtx, vars)
+
+	if err == nil {
+		t.Error("mergeContextEntries() should return error for invalid test context type")
+	}
+}
+
+func TestResolveResourcePolicyConflict(t *testing.T) {
+	// Save original exiter
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	// Set mock exiter
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	// Create test case with both ResourcePolicyJSON and ResourcePolicyTemplate
+	test := TestCase{
+		Action:                 "s3:GetObject",
+		Resource:               "arn:aws:s3:::bucket/*",
+		ResourcePolicyJSON:     "policy.json",
+		ResourcePolicyTemplate: "policy.json.tpl",
+	}
+
+	cfg := SimulatorConfig{
+		ScenarioPath: scenarioPath,
+		Variables:    map[string]any{},
+	}
+
+	// This should trigger Die() for conflicting resource policies
+	_ = resolveResourcePolicy(test, cfg, 0)
+
+	// Verify Die was called
+	if !mockExit.called {
+		t.Error("resolveResourcePolicy() did not call Die() when both resource_policy_json and resource_policy_template are set")
+	}
+	if mockExit.exitCode != 1 {
+		t.Errorf("resolveResourcePolicy() called Exit with code %d, want 1", mockExit.exitCode)
+	}
+}
+
+func TestResolveResourcePolicyWithJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	// Create a resource policy JSON file
+	policyFile := filepath.Join(tmpDir, "resource-policy.json")
+	policyContent := `{
+		"Version": "2012-10-17",
+		"Statement": [
+			{
+				"Effect": "Allow",
+				"Principal": {"AWS": "arn:aws:iam::123456789012:root"},
+				"Action": "s3:GetObject",
+				"Resource": "arn:aws:s3:::bucket/*"
+			}
+		]
+	}`
+	if err := os.WriteFile(policyFile, []byte(policyContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	test := TestCase{
+		Action:             "s3:GetObject",
+		Resource:           "arn:aws:s3:::bucket/*",
+		ResourcePolicyJSON: "resource-policy.json",
+	}
+
+	cfg := SimulatorConfig{
+		ScenarioPath: scenarioPath,
+		Variables:    map[string]any{},
+	}
+
+	result := resolveResourcePolicy(test, cfg, 0)
+
+	// Verify result is valid JSON
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Errorf("resolveResourcePolicy() produced invalid JSON: %v", err)
+	}
+
+	// Verify it's minified (no whitespace)
+	if strings.Contains(result, "\n") || strings.Contains(result, "  ") {
+		t.Error("resolveResourcePolicy() should return minified JSON")
+	}
+}
+
+func TestResolveResourcePolicyWithTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	// Create a resource policy template file
+	templateFile := filepath.Join(tmpDir, "resource-policy.json.tpl")
+	templateContent := `{
+		"Version": "2012-10-17",
+		"Statement": [
+			{
+				"Effect": "Allow",
+				"Principal": {"AWS": "arn:aws:iam::{{.account}}:root"},
+				"Action": "s3:GetObject",
+				"Resource": "arn:aws:s3:::{{.bucket}}/*"
+			}
+		]
+	}`
+	if err := os.WriteFile(templateFile, []byte(templateContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	test := TestCase{
+		Action:                 "s3:GetObject",
+		Resource:               "arn:aws:s3:::test-bucket/*",
+		ResourcePolicyTemplate: "resource-policy.json.tpl",
+	}
+
+	cfg := SimulatorConfig{
+		ScenarioPath: scenarioPath,
+		Variables: map[string]any{
+			"account": "123456789012",
+			"bucket":  "test-bucket",
+		},
+	}
+
+	result := resolveResourcePolicy(test, cfg, 0)
+
+	// Verify result is valid JSON
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Errorf("resolveResourcePolicy() produced invalid JSON: %v", err)
+	}
+
+	// Verify template variables were rendered
+	if !strings.Contains(result, "123456789012") {
+		t.Error("resolveResourcePolicy() did not render account variable")
+	}
+	if !strings.Contains(result, "test-bucket") {
+		t.Error("resolveResourcePolicy() did not render bucket variable")
+	}
+}
+
+func TestResolveResourcePolicyWithScenarioDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	// Test case with no resource policy specified - should use scenario default
+	test := TestCase{
+		Action:   "s3:GetObject",
+		Resource: "arn:aws:s3:::bucket/*",
+	}
+
+	scenarioResourcePolicy := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:*","Resource":"*"}]}`
+
+	cfg := SimulatorConfig{
+		ScenarioPath:       scenarioPath,
+		ResourcePolicyJSON: scenarioResourcePolicy,
+		Variables:          map[string]any{},
+	}
+
+	result := resolveResourcePolicy(test, cfg, 0)
+
+	if result != scenarioResourcePolicy {
+		t.Errorf("resolveResourcePolicy() = %v, want scenario default %v", result, scenarioResourcePolicy)
 	}
 }

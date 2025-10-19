@@ -167,6 +167,12 @@ func TestCheckWithError(t *testing.T) {
 	}
 }
 
+func TestWarnSCPSimulation(t *testing.T) {
+	// This function just prints to stderr, we can call it to ensure it doesn't panic
+	WarnSCPSimulation()
+	// If we get here without panic, test passes
+}
+
 // Helper function for tests
 func contains(s, substr string) bool {
 	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) > len(substr) && (s[0:len(substr)] == substr || contains(s[1:], substr)))

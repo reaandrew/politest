@@ -293,6 +293,39 @@ func TestMinifyJSONErrorPath(t *testing.T) {
 	}
 }
 
+func TestMinifyJSONFallbackPath(t *testing.T) {
+	// Test MinifyJSON with valid JSON that might trigger the fallback path
+	// This tests the case where Compact might fail but Unmarshal succeeds
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{
+			name:  "unicode escapes",
+			input: []byte(`{"key": "\u0048\u0065\u006c\u006c\u006f"}`),
+		},
+		{
+			name:  "large numbers",
+			input: []byte(`{"bignum": 12345678901234567890}`),
+		},
+		{
+			name:  "special chars",
+			input: []byte(`{"special": "line1\nline2\ttab"}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := MinifyJSON(tt.input)
+			// Verify result is valid JSON
+			var parsed any
+			if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+				t.Errorf("MinifyJSON() produced invalid JSON: %v", err)
+			}
+		})
+	}
+}
+
 func TestMergeSCPFilesEdgeCases(t *testing.T) {
 	tmpDir := t.TempDir()
 
