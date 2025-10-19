@@ -17,7 +17,8 @@ func RunLegacyFormat(client IAMSimulator, scen *Scenario, cfg SimulatorConfig) {
 	// Render actions/resources/context with Go templates
 	actions := RenderStringSlice(scen.Actions, cfg.Variables)
 	resources := RenderStringSlice(scen.Resources, cfg.Variables)
-	ctxEntries := RenderContext(scen.Context, cfg.Variables)
+	ctxEntries, err := RenderContext(scen.Context, cfg.Variables)
+	Check(err)
 
 	// Build and execute AWS API call
 	input := buildSimulateInput(cfg, scen, actions, resources, ctxEntries)
@@ -25,13 +26,14 @@ func RunLegacyFormat(client IAMSimulator, scen *Scenario, cfg SimulatorConfig) {
 	Check(err)
 
 	// Process and display results
-	evals := processAndDisplayResults(resp)
+	_ = processAndDisplayResults(resp)
 
 	// Save raw JSON if requested
 	saveResponseIfRequested(cfg.SavePath, resp)
 
-	// Check expectations and handle failures
-	checkExpectationsAndExit(scen.Expect, evals, cfg.NoAssert)
+	// Check expectations against ALL evaluation results (not just the map)
+	// This ensures we catch failures when the same action is tested on multiple resources
+	checkExpectationsAgainstAllResults(scen.Expect, resp.EvaluationResults, cfg.NoAssert)
 }
 
 // buildSimulateInput creates the IAM simulation input from scenario and config
@@ -63,15 +65,28 @@ func buildSimulateInput(cfg SimulatorConfig, scen *Scenario, actions, resources 
 }
 
 // processAndDisplayResults processes evaluation results and displays them in a table
+// When multiple resources are tested with the same action, returns the decision map
+// with action as key. For multiple resources with same action, the last result is stored
+// but all results are displayed in the table.
 func processAndDisplayResults(resp *iam.SimulateCustomPolicyOutput) map[string]string {
 	rows := make([][3]string, 0, len(resp.EvaluationResults))
 	evals := map[string]string{}
 	for _, r := range resp.EvaluationResults {
 		act := AwsString(r.EvalActionName)
+		res := AwsString(r.EvalResourceName)
 		dec := string(r.EvalDecision)
+
+		// Store decision in map (will be overwritten if same action appears multiple times)
 		evals[act] = dec
+
+		// Display with resource name if available
+		actionDisplay := act
+		if res != "" && res != "*" {
+			actionDisplay = fmt.Sprintf("%s on %s", act, res)
+		}
+
 		detail := extractMatchedStatements(r.MatchedStatements)
-		rows = append(rows, [3]string{act, dec, detail})
+		rows = append(rows, [3]string{actionDisplay, dec, detail})
 	}
 	PrintTable(rows)
 	return evals
@@ -95,27 +110,47 @@ func extractMatchedStatements(matched []types.Statement) string {
 }
 
 // saveResponseIfRequested saves the API response to a file if savePath is provided
+// Uses 0600 permissions to restrict access to the current user only, as the response
+// may contain internal resource names or account IDs
 func saveResponseIfRequested(savePath string, resp any) {
 	if savePath != "" {
 		b, _ := json.MarshalIndent(resp, "", "  ")
-		Check(os.WriteFile(savePath, b, 0o644))
-		fmt.Printf("\nSaved raw response → %s\n", savePath)
+		Check(os.WriteFile(savePath, b, 0o600))
+		fmt.Printf("\nSaved raw response → %s (permissions: 0600)\n", savePath)
 	}
 }
 
-// checkExpectationsAndExit checks expectations against actual results and exits on failures
-func checkExpectationsAndExit(expect map[string]string, evals map[string]string, noAssert bool) {
-	failures := [][3]string{}
-	for action, want := range expect {
-		got := evals[action]
-		if !strings.EqualFold(got, want) {
-			failures = append(failures, [3]string{action, want, got})
+// checkExpectationsAgainstAllResults checks expectations against ALL evaluation results
+// This is critical for legacy mode with multiple resources, as it ensures we catch
+// failures even when the same action is tested on multiple resources with different outcomes
+func checkExpectationsAgainstAllResults(expect map[string]string, results []types.EvaluationResult, noAssert bool) {
+	if len(expect) == 0 {
+		return // No expectations to check
+	}
+
+	failures := []string{}
+	for _, r := range results {
+		action := AwsString(r.EvalActionName)
+		resource := AwsString(r.EvalResourceName)
+		decision := string(r.EvalDecision)
+
+		// Check if we have an expectation for this action
+		if wantDecision, ok := expect[action]; ok {
+			if !strings.EqualFold(decision, wantDecision) {
+				resourceStr := "*"
+				if resource != "" && resource != "*" {
+					resourceStr = resource
+				}
+				failMsg := fmt.Sprintf("%s on %s: expected %s, got %s", action, resourceStr, wantDecision, decision)
+				failures = append(failures, failMsg)
+			}
 		}
 	}
+
 	if len(failures) > 0 && !noAssert {
 		fmt.Println("\nExpectation failures:")
-		for _, f := range failures {
-			fmt.Printf("  - %s: expected %s, got %s\n", f[0], f[1], IfEmpty(f[2], "<missing>"))
+		for _, msg := range failures {
+			fmt.Printf("  - %s\n", msg)
 		}
 		GlobalExiter.Exit(2)
 	}
@@ -156,7 +191,8 @@ func runSingleTest(client IAMSimulator, scen *Scenario, cfg SimulatorConfig, tes
 	fmt.Printf("[%d/%d] %s\n", index+1, len(scen.Tests), testName)
 
 	// Build test input
-	ctxEntries := mergeContextEntries(scen.Context, test.Context, cfg.Variables)
+	ctxEntries, err := mergeContextEntries(scen.Context, test.Context, cfg.Variables)
+	Check(err)
 	testResourcePolicy := resolveResourcePolicy(test, cfg, index)
 	input := buildTestInput(cfg, action, resources, ctxEntries, testResourcePolicy)
 	applyTestOverrides(input, scen, test, cfg.Variables)
@@ -194,13 +230,19 @@ func getTestName(test TestCase, action string, resources []string) string {
 }
 
 // mergeContextEntries merges scenario-level and test-level context
-func mergeContextEntries(scenCtx, testCtx []ContextEntryYml, vars map[string]any) []types.ContextEntry {
-	ctxEntries := RenderContext(scenCtx, vars)
+func mergeContextEntries(scenCtx, testCtx []ContextEntryYml, vars map[string]any) ([]types.ContextEntry, error) {
+	ctxEntries, err := RenderContext(scenCtx, vars)
+	if err != nil {
+		return nil, err
+	}
 	if len(testCtx) > 0 {
-		testCtxRendered := RenderContext(testCtx, vars)
+		testCtxRendered, err := RenderContext(testCtx, vars)
+		if err != nil {
+			return nil, err
+		}
 		ctxEntries = append(ctxEntries, testCtxRendered...)
 	}
-	return ctxEntries
+	return ctxEntries, nil
 }
 
 // resolveResourcePolicy determines the resource policy for a test

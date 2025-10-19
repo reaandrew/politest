@@ -63,3 +63,12 @@ func Die(f string, a ...any) {
 	fmt.Fprintf(os.Stderr, f+"\n", a...)
 	GlobalExiter.Exit(1)
 }
+
+// WarnSCPSimulation prints a warning that SCP/RCP simulation is an approximation
+func WarnSCPSimulation() {
+	fmt.Fprintf(os.Stderr, "\n⚠️  WARNING: SCP/RCP Simulation Approximation\n")
+	fmt.Fprintf(os.Stderr, "   The AWS SimulateCustomPolicy API was not designed for testing SCPs/RCPs.\n")
+	fmt.Fprintf(os.Stderr, "   politest uses PermissionsBoundaryPolicyInputList as a workaround, which\n")
+	fmt.Fprintf(os.Stderr, "   APPROXIMATES real-world behavior but may not be 100%% accurate.\n")
+	fmt.Fprintf(os.Stderr, "   Always validate with integration tests in actual AWS accounts.\n\n")
+}

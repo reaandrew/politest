@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,38 +45,43 @@ func RenderString(s string, vars map[string]any) string {
 }
 
 // RenderContext converts YAML context entries to IAM context entries with rendering
-func RenderContext(in []ContextEntryYml, vars map[string]any) []iamtypes.ContextEntry {
+func RenderContext(in []ContextEntryYml, vars map[string]any) ([]iamtypes.ContextEntry, error) {
 	out := make([]iamtypes.ContextEntry, 0, len(in))
 	for _, e := range in {
 		values := make([]string, 0, len(e.ContextKeyValues))
 		for _, v := range e.ContextKeyValues {
 			values = append(values, RenderTemplateString(v, vars))
 		}
+		ctxType, err := ParseContextType(e.ContextKeyType)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, iamtypes.ContextEntry{
 			ContextKeyName:   StrPtr(e.ContextKeyName),
-			ContextKeyType:   ParseContextType(e.ContextKeyType),
+			ContextKeyType:   ctxType,
 			ContextKeyValues: values,
 		})
 	}
-	return out
+	return out, nil
 }
 
 // ParseContextType converts a string to IAM context key type enum
-func ParseContextType(t string) iamtypes.ContextKeyTypeEnum {
+// Returns an error for unknown types instead of silently falling back to string
+func ParseContextType(t string) (iamtypes.ContextKeyTypeEnum, error) {
 	switch strings.ToLower(strings.TrimSpace(t)) {
 	case "string":
-		return iamtypes.ContextKeyTypeEnumString
+		return iamtypes.ContextKeyTypeEnumString, nil
 	case "stringlist":
-		return iamtypes.ContextKeyTypeEnumStringList
+		return iamtypes.ContextKeyTypeEnumStringList, nil
 	case "numeric":
-		return iamtypes.ContextKeyTypeEnumNumeric
+		return iamtypes.ContextKeyTypeEnumNumeric, nil
 	case "numericlist":
-		return iamtypes.ContextKeyTypeEnumNumericList
+		return iamtypes.ContextKeyTypeEnumNumericList, nil
 	case "boolean":
-		return iamtypes.ContextKeyTypeEnumBoolean
+		return iamtypes.ContextKeyTypeEnumBoolean, nil
 	case "booleanlist":
-		return iamtypes.ContextKeyTypeEnumBooleanList
+		return iamtypes.ContextKeyTypeEnumBooleanList, nil
 	default:
-		return iamtypes.ContextKeyTypeEnumString
+		return "", fmt.Errorf("unsupported context type '%s': must be one of: string, stringList, numeric, numericList, boolean, booleanList", t)
 	}
 }

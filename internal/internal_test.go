@@ -190,46 +190,69 @@ func TestRenderString(t *testing.T) {
 
 func TestParseContextType(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  types.ContextKeyTypeEnum
+		name    string
+		input   string
+		want    types.ContextKeyTypeEnum
+		wantErr bool
 	}{
 		{
-			name:  "string lowercase",
-			input: "string",
-			want:  types.ContextKeyTypeEnumString,
+			name:    "string lowercase",
+			input:   "string",
+			want:    types.ContextKeyTypeEnumString,
+			wantErr: false,
 		},
 		{
-			name:  "stringList mixed case",
-			input: "stringList",
-			want:  types.ContextKeyTypeEnumStringList,
+			name:    "stringList mixed case",
+			input:   "stringList",
+			want:    types.ContextKeyTypeEnumStringList,
+			wantErr: false,
 		},
 		{
-			name:  "numeric",
-			input: "numeric",
-			want:  types.ContextKeyTypeEnumNumeric,
+			name:    "numeric",
+			input:   "numeric",
+			want:    types.ContextKeyTypeEnumNumeric,
+			wantErr: false,
 		},
 		{
-			name:  "numericList",
-			input: "numericList",
-			want:  types.ContextKeyTypeEnumNumericList,
+			name:    "numericList",
+			input:   "numericList",
+			want:    types.ContextKeyTypeEnumNumericList,
+			wantErr: false,
 		},
 		{
-			name:  "boolean",
-			input: "boolean",
-			want:  types.ContextKeyTypeEnumBoolean,
+			name:    "boolean",
+			input:   "boolean",
+			want:    types.ContextKeyTypeEnumBoolean,
+			wantErr: false,
 		},
 		{
-			name:  "booleanList",
-			input: "booleanList",
-			want:  types.ContextKeyTypeEnumBooleanList,
+			name:    "booleanList",
+			input:   "booleanList",
+			want:    types.ContextKeyTypeEnumBooleanList,
+			wantErr: false,
+		},
+		{
+			name:    "unknown type should error",
+			input:   "unknownType",
+			want:    "",
+			wantErr: true,
+		},
+		{
+			name:    "typo should error",
+			input:   "strlng",
+			want:    "",
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseContextType(tt.input)
-			if got != tt.want {
+			got, err := ParseContextType(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseContextType() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && got != tt.want {
 				t.Errorf("ParseContextType() = %v, want %v", got, tt.want)
 			}
 		})
@@ -411,7 +434,10 @@ func TestRenderContext(t *testing.T) {
 		{ContextKeyName: "aws:userid", ContextKeyValues: []string{"12345"}, ContextKeyType: "string"},
 	}
 
-	result := RenderContext(ctx, vars)
+	result, err := RenderContext(ctx, vars)
+	if err != nil {
+		t.Fatalf("RenderContext() unexpected error: %v", err)
+	}
 
 	if len(result) != 2 {
 		t.Errorf("RenderContext() returned %v entries, want 2", len(result))
@@ -1026,8 +1052,11 @@ func TestParseContextTypeAllTypes(t *testing.T) {
 
 	for _, typeName := range allTypes {
 		t.Run(typeName, func(t *testing.T) {
-			// Should not panic
-			_ = ParseContextType(typeName)
+			// Should not panic and should not error for valid types
+			_, err := ParseContextType(typeName)
+			if err != nil {
+				t.Errorf("ParseContextType(%s) returned unexpected error: %v", typeName, err)
+			}
 		})
 	}
 }
@@ -1063,7 +1092,10 @@ func TestRenderContextWithTemplates(t *testing.T) {
 		},
 	}
 
-	result := RenderContext(ctx, vars)
+	result, err := RenderContext(ctx, vars)
+	if err != nil {
+		t.Fatalf("RenderContext() unexpected error: %v", err)
+	}
 
 	if len(result) != 4 {
 		t.Errorf("RenderContext() returned %v entries, want 4", len(result))
@@ -1283,10 +1315,10 @@ func TestMinifyJSONErrorPath(t *testing.T) {
 }
 
 func TestParseContextTypeDefault(t *testing.T) {
-	// Test the default case
-	result := ParseContextType("unknown_type")
-	if result != types.ContextKeyTypeEnumString {
-		t.Errorf("ParseContextType() default = %v, want String", result)
+	// Test that unknown types now return an error instead of defaulting to string
+	_, err := ParseContextType("unknown_type")
+	if err == nil {
+		t.Error("ParseContextType() with unknown type should return an error, got nil")
 	}
 }
 

@@ -23,8 +23,13 @@ func main() {
 	flag.BoolVar(&noAssert, "no-assert", false, "Do not fail on expectation mismatches")
 	flag.Parse()
 
+	// Check for unknown flags
+	if flag.NArg() > 0 {
+		internal.Die("unknown arguments: %v\nUse -h or --help for usage information", flag.Args())
+	}
+
 	if scenarioPath == "" {
-		internal.Die("missing --scenario")
+		internal.Die("missing --scenario\nUsage: politest --scenario <path> [--save <path>] [--no-assert]")
 	}
 
 	absScenario, err := filepath.Abs(scenarioPath)
@@ -73,6 +78,9 @@ func main() {
 		files := internal.ExpandGlobsRelative(filepath.Dir(absScenario), scen.SCPPaths)
 		merged := internal.MergeSCPFiles(files)
 		pbJSON = internal.ToJSONMin(merged)
+
+		// Warn that SCP simulation is an approximation
+		internal.WarnSCPSimulation()
 	}
 
 	// Resource policy: template or pre-rendered JSON
