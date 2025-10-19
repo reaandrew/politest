@@ -4,10 +4,28 @@
 
 # politest
 
+## Build & Quality
+
+[![CI](https://github.com/reaandrew/politest/actions/workflows/ci.yml/badge.svg)](https://github.com/reaandrew/politest/actions/workflows/ci.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=coverage)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
+[![Go Report Card](https://goreportcard.com/badge/github.com/reaandrew/politest)](https://goreportcard.com/report/github.com/reaandrew/politest)
+
+## Security
+
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
 [![Semgrep](https://img.shields.io/badge/Semgrep-Enabled-blueviolet?logo=semgrep)](https://semgrep.dev/)
+[![GitGuardian](https://img.shields.io/badge/GitGuardian-Monitored-blue?logo=git)](https://www.gitguardian.com/)
+
+## Project Info
+
+[![Go Version](https://img.shields.io/github/go-mod/go-version/reaandrew/politest)](https://go.dev/)
+[![Release](https://img.shields.io/github/v/release/reaandrew/politest)](https://github.com/reaandrew/politest/releases)
+[![License](https://img.shields.io/github/license/reaandrew/politest)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 A single-binary Go tool for testing AWS IAM policies using scenario-based YAML configurations.
 
