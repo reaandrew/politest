@@ -4,6 +4,11 @@
 
 # politest
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
+[![Semgrep](https://img.shields.io/badge/Semgrep-Enabled-blueviolet?logo=semgrep)](https://semgrep.dev/)
+
 A single-binary Go tool for testing AWS IAM policies using scenario-based YAML configurations.
 
 ## Features
@@ -189,6 +194,7 @@ Flags:
   --scenario string    Path to scenario YAML (required)
   --save string        Path to save raw JSON response (optional)
   --no-assert          Do not fail on expectation mismatches (optional)
+  --no-warn            Suppress SCP/RCP simulation approximation warning (optional)
 ```
 
 ## Scenario Configuration

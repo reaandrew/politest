@@ -21,7 +21,6 @@ Every commit is scanned by multiple security tools:
 - **GitGuardian** - Secret detection in git history
 - **SonarCloud** - Code security analysis and vulnerability detection
 - **Semgrep** - Static application security testing (SAST)
-- **Trivy** - Container and dependency scanning (if applicable)
 
 All scans must pass before code is merged to the main branch.
 
@@ -73,7 +72,7 @@ Security vulnerabilities should be reported privately to avoid exploitation.
 
 ### 3. Report via Email (Alternative)
 
-If you prefer email, send to: **[Repository owner's security email - UPDATE THIS]**
+If you prefer email, send to: **security@andrewrea.co.uk**
 
 ### What to Include
 
@@ -261,7 +260,7 @@ YAML parsing uses `gopkg.in/yaml.v3`:
 
 For urgent security issues, please contact:
 
-**[UPDATE: Add security contact email]**
+**security@andrewrea.co.uk**
 
 For general security questions:
 

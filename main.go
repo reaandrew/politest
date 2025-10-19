@@ -17,10 +17,12 @@ func main() {
 	var scenarioPath string
 	var savePath string
 	var noAssert bool
+	var noWarn bool
 
 	flag.StringVar(&scenarioPath, "scenario", "", "Path to scenario YAML")
 	flag.StringVar(&savePath, "save", "", "Path to save raw JSON response")
 	flag.BoolVar(&noAssert, "no-assert", false, "Do not fail on expectation mismatches")
+	flag.BoolVar(&noWarn, "no-warn", false, "Suppress SCP/RCP simulation approximation warning")
 	flag.Parse()
 
 	// Check for unknown flags
@@ -29,7 +31,7 @@ func main() {
 	}
 
 	if scenarioPath == "" {
-		internal.Die("missing --scenario\nUsage: politest --scenario <path> [--save <path>] [--no-assert]")
+		internal.Die("missing --scenario\nUsage: politest --scenario <path> [--save <path>] [--no-assert] [--no-warn]")
 	}
 
 	absScenario, err := filepath.Abs(scenarioPath)
@@ -79,8 +81,10 @@ func main() {
 		merged := internal.MergeSCPFiles(files)
 		pbJSON = internal.ToJSONMin(merged)
 
-		// Warn that SCP simulation is an approximation
-		internal.WarnSCPSimulation()
+		// Warn that SCP simulation is an approximation (unless suppressed)
+		if !noWarn {
+			internal.WarnSCPSimulation()
+		}
 	}
 
 	// Resource policy: template or pre-rendered JSON
