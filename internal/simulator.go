@@ -162,9 +162,12 @@ func RunTestCollection(client IAMSimulator, scen *Scenario, cfg SimulatorConfig)
 	failCount := 0
 	var allResponses []*iam.SimulateCustomPolicyOutput
 
-	fmt.Printf("Running %d test(s)...\n\n", len(scen.Tests))
+	// Expand tests with actions array into individual tests
+	expandedTests := expandTestsWithActions(scen.Tests)
 
-	for i, test := range scen.Tests {
+	fmt.Printf("Running %d test(s)...\n\n", len(expandedTests))
+
+	for i, test := range expandedTests {
 		pass, resp := runSingleTest(client, scen, cfg, test, i)
 		allResponses = append(allResponses, resp)
 		if pass {
@@ -180,6 +183,36 @@ func RunTestCollection(client IAMSimulator, scen *Scenario, cfg SimulatorConfig)
 	if failCount > 0 && !cfg.NoAssert {
 		GlobalExiter.Exit(2)
 	}
+}
+
+// expandTestsWithActions expands tests that use actions array into individual tests
+func expandTestsWithActions(tests []TestCase) []TestCase {
+	var expanded []TestCase
+
+	for _, test := range tests {
+		// Validation: cannot have both action and actions
+		if test.Action != "" && len(test.Actions) > 0 {
+			Die("test '%s': cannot specify both 'action' and 'actions'", test.Name)
+		}
+
+		// If actions array is provided, expand into multiple tests
+		if len(test.Actions) > 0 {
+			for _, action := range test.Actions {
+				expandedTest := test
+				expandedTest.Action = action
+				expandedTest.Actions = nil // Clear actions array
+				expanded = append(expanded, expandedTest)
+			}
+		} else if test.Action != "" {
+			// Single action - use as-is
+			expanded = append(expanded, test)
+		} else {
+			// No action specified
+			Die("test '%s': must specify either 'action' or 'actions'", test.Name)
+		}
+	}
+
+	return expanded
 }
 
 // runSingleTest executes a single test case and returns pass/fail status and response

@@ -23,7 +23,8 @@ type Scenario struct {
 // TestCase represents a single test case in the new collection format
 type TestCase struct {
 	Name                   string            `yaml:"name"`                     // descriptive test name
-	Action                 string            `yaml:"action"`                   // single action to test
+	Action                 string            `yaml:"action"`                   // single action to test (use this OR actions, not both)
+	Actions                []string          `yaml:"actions"`                  // multiple actions to test with same resource/context (use this OR action, not both)
 	Resource               string            `yaml:"resource"`                 // single resource ARN (optional, can use Resources for multiple)
 	Resources              []string          `yaml:"resources"`                // multiple resources (alternative to Resource)
 	Context                []ContextEntryYml `yaml:"context"`                  // optional context for this specific test

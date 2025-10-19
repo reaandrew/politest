@@ -1,0 +1,248 @@
+# ACME EC2 Instance Profile Athena Policy Tests
+# Converted from legacy bash/JSON test framework to politest
+# This scenario demonstrates comprehensive IAM policy testing with context conditions
+# Uses the new 'actions' array feature to reduce duplication
+
+vars_file: "vars.yml"
+policy_template: "policies/ACME_EC2InstanceProfile_AthenaPolicy.json.tpl"
+
+# Include organizational SCPs
+scp_paths:
+  - "scp/*.json"
+
+# Test collection format - using actions array to reduce duplication
+tests:
+  # ========================================
+  # ALLOW Cases - These should succeed
+  # ========================================
+
+  - name: "AthenaActionsAllow - List operations"
+    actions:  # Using actions array - expands to 3 tests
+      - "athena:ListEngineVersions"
+      - "athena:ListTagsForResource"
+      - "athena:ListWorkGroups"
+    resource: "arn:aws:athena:{{.region}}:{{.dummy_account_id}}:*"
+    expect: "allowed"
+
+  - name: "AthenaWorkgroupActionsAllow - Query operations"
+    actions:  # Multiple actions with same context
+      - "athena:BatchGetNamedQuery"
+      - "athena:StartQueryExecution"
+      - "athena:GetQueryExecution"
+    resources:  # Test across multiple accounts
+      - "arn:aws:athena:{{.region}}:{{.dns_hub_dev_account_id}}:workgroup/test-workgroup"
+      - "arn:aws:athena:{{.region}}:{{.dns_hub_live_account_id}}:workgroup/analytics"
+      - "arn:aws:athena:{{.region}}:{{.dummy_account_id}}:workgroup/reporting"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "aws:ResourceOrgPaths"
+        ContextKeyValues: ["{{.data_plane_nonprod_org_path}}/account1"]
+        ContextKeyType: "string"
+      - ContextKeyName: "aws:VpceAccount"
+        ContextKeyValues: ["{{.dns_hub_dev_account_id}}"]
+        ContextKeyType: "string"
+    expect: "allowed"
+
+  - name: "S3BucketActionsAllow - Bucket metadata"
+    actions:
+      - "s3:GetBucketLocation"
+      - "s3:ListBucket"
+    resources:
+      - "arn:aws:s3:::test-bucket"
+      - "arn:aws:s3:::data-lake"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "s3:ResourceAccount"
+        ContextKeyValues: ["{{.dummy_account_id}}"]
+        ContextKeyType: "string"
+    expect: "allowed"
+
+  - name: "S3ObjectActionsAllow - Object operations with encryption"
+    actions:
+      - "s3:GetObject"
+      - "s3:PutObject"
+      - "s3:AbortMultipartUpload"
+    resources:
+      - "arn:aws:s3:::query-results/file.parquet"
+      - "arn:aws:s3:::results-bucket/output.csv"
+      - "arn:aws:s3:::upload-bucket/large-file.gz"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "s3:ResourceAccount"
+        ContextKeyValues: ["{{.dummy_account_id}}"]
+        ContextKeyType: "string"
+      - ContextKeyName: "s3:x-amz-server-side-encryption-aws-kms-key-id"
+        ContextKeyValues: ["arn:aws:kms:{{.region}}:{{.dummy_account_id}}:key/12345678-1234-1234-1234-123456789012"]
+        ContextKeyType: "string"
+    expect: "allowed"
+
+  # ========================================
+  # DENY Cases - Explicit denies
+  # ========================================
+
+  - name: "AthenaWorkgroupActionsDeny - Primary workgroup blocked"
+    actions:
+      - "athena:BatchGetNamedQuery"
+      - "athena:CreateWorkGroup"
+      - "athena:StartQueryExecution"
+    resource: "arn:aws:athena:*:*:workgroup/primary"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "aws:ResourceOrgPaths"
+        ContextKeyValues: ["{{.data_plane_nonprod_org_path}}/account"]
+        ContextKeyType: "string"
+      - ContextKeyName: "aws:VpceAccount"
+        ContextKeyValues: ["{{.dns_hub_dev_account_id}}"]
+        ContextKeyType: "string"
+    expect: "explicitDeny"
+
+  - name: "AthenaWorkgroupNonProdQueryActionsDeny - Live VPCE on nonprod"
+    actions:
+      - "athena:StartQueryExecution"
+      - "athena:GetQueryExecution"
+      - "athena:StopQueryExecution"
+    resource: "arn:aws:athena:{{.region}}:{{.dummy_account_id}}:workgroup/test-wg"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "aws:ResourceOrgPaths"
+        ContextKeyValues: ["{{.data_plane_nonprod_org_path}}/account"]
+        ContextKeyType: "string"
+      - ContextKeyName: "aws:VpceAccount"
+        ContextKeyValues: ["{{.dns_hub_live_account_id}}"]
+        ContextKeyType: "string"
+    expect: "explicitDeny"
+
+  - name: "AthenaWorkgroupProdQueryActionsDeny - Dev VPCE on prod org path"
+    actions:
+      - "athena:GetQueryExecution"
+      - "athena:BatchGetQueryExecution"
+    resource: "arn:aws:athena:{{.region}}:{{.dummy_account_id}}:workgroup/prod-wg"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "aws:ResourceOrgPaths"
+        ContextKeyValues: ["{{.data_plane_prod_org_path}}/prod-account"]
+        ContextKeyType: "string"
+      - ContextKeyName: "aws:VpceAccount"
+        ContextKeyValues: ["{{.dns_hub_dev_account_id}}"]
+        ContextKeyType: "string"
+    expect: "explicitDeny"
+
+  - name: "S3BucketAccountBucketActionsDeny - Bucket management blocked"
+    actions:
+      - "s3:CreateBucket"
+      - "s3:DeleteBucket"
+      - "s3:PutBucketPolicy"
+      - "s3:PutBucketVersioning"
+    resources:
+      - "arn:aws:s3:::{{.dummy_account_id}}-new-bucket"
+      - "arn:aws:s3:::{{.dummy_account_id}}-existing-bucket"
+      - "arn:aws:s3:::{{.dummy_account_id}}-data-lake"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "s3:ResourceAccount"
+        ContextKeyValues: ["{{.dummy_account_id}}"]
+        ContextKeyType: "string"
+    expect: "explicitDeny"
+
+  - name: "S3ObjectAccountObjectActionsDeny - Delete on account buckets"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::{{.dummy_account_id}}-bucket/file.txt"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "s3:ResourceAccount"
+        ContextKeyValues: ["{{.dummy_account_id}}"]
+        ContextKeyType: "string"
+      - ContextKeyName: "s3:x-amz-server-side-encryption-aws-kms-key-id"
+        ContextKeyValues: ["arn:aws:kms:{{.region}}:{{.dummy_account_id}}:key/*"]
+        ContextKeyType: "string"
+    expect: "explicitDeny"
+
+  - name: "S3ObjectAclActionsDeny - ACL modifications blocked"
+    actions:
+      - "s3:PutObjectAcl"
+      - "s3:PutObjectVersionAcl"
+    resources:
+      - "arn:aws:s3:::any-bucket/object.json"
+      - "arn:aws:s3:::versioned-bucket/doc.pdf"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "s3:ResourceAccount"
+        ContextKeyValues: ["{{.dummy_account_id}}"]
+        ContextKeyType: "string"
+    expect: "explicitDeny"
+
+  - name: "S3ObjectCalledViaActionsDeny - Invalid CalledVia"
+    actions:
+      - "s3:GetObject"
+      - "s3:PutObject"
+    resource: "arn:aws:s3:::data/file.csv"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["dynamodb.amazonaws.com"]  # Wrong service
+        ContextKeyType: "stringList"
+      - ContextKeyName: "s3:ResourceAccount"
+        ContextKeyValues: ["{{.dummy_account_id}}"]
+        ContextKeyType: "string"
+      - ContextKeyName: "s3:x-amz-server-side-encryption-aws-kms-key-id"
+        ContextKeyValues: ["arn:aws:kms:{{.region}}:{{.dummy_account_id}}:key/*"]
+        ContextKeyType: "string"
+    expect: "explicitDeny"
+
+  - name: "S3ObjectCalledViaActionsDeny - No CalledVia context"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::bucket/new-file.txt"
+    context:
+      # Missing aws:CalledVia - should be denied
+      - ContextKeyName: "s3:ResourceAccount"
+        ContextKeyValues: ["{{.dummy_account_id}}"]
+        ContextKeyType: "string"
+      - ContextKeyName: "s3:x-amz-server-side-encryption-aws-kms-key-id"
+        ContextKeyValues: ["arn:aws:kms:{{.region}}:{{.dummy_account_id}}:key/*"]
+        ContextKeyType: "string"
+    expect: "explicitDeny"
+
+  - name: "S3ObjectEncryptionActionsDeny - PutObject without encryption"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::testbucket/testobject"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "s3:ResourceAccount"
+        ContextKeyValues: ["{{.dummy_account_id}}"]
+        ContextKeyType: "string"
+      # Missing encryption key - should be denied
+    expect: "explicitDeny"
+
+  - name: "S3ResourceOwnerActionsDeny - Wrong resource account"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::other-account-bucket/data.json"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+      - ContextKeyName: "s3:ResourceAccount"
+        ContextKeyValues: ["{{.dns_hub_dev_account_id}}"]  # Wrong account
+        ContextKeyType: "string"
+      - ContextKeyName: "s3:x-amz-server-side-encryption-aws-kms-key-id"
+        ContextKeyValues: ["arn:aws:kms:{{.region}}:{{.dummy_account_id}}:key/*"]
+        ContextKeyType: "string"
+    expect: "explicitDeny"

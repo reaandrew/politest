@@ -1533,3 +1533,197 @@ func TestResolveResourcePolicyWithScenarioDefault(t *testing.T) {
 		t.Errorf("resolveResourcePolicy() = %v, want scenario default %v", result, scenarioResourcePolicy)
 	}
 }
+
+func TestExpandTestsWithActions(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   []TestCase
+		wantLen int
+		wantErr bool
+	}{
+		{
+			name: "single action - no expansion",
+			input: []TestCase{
+				{
+					Name:     "Test 1",
+					Action:   "s3:GetObject",
+					Resource: "arn:aws:s3:::bucket/*",
+					Expect:   "allowed",
+				},
+			},
+			wantLen: 1,
+			wantErr: false,
+		},
+		{
+			name: "actions array - expands to multiple tests",
+			input: []TestCase{
+				{
+					Name: "Multiple actions",
+					Actions: []string{
+						"s3:GetObject",
+						"s3:PutObject",
+						"s3:ListBucket",
+					},
+					Resource: "arn:aws:s3:::bucket/*",
+					Expect:   "allowed",
+				},
+			},
+			wantLen: 3,
+			wantErr: false,
+		},
+		{
+			name: "mix of single and multiple actions",
+			input: []TestCase{
+				{
+					Name:     "Single",
+					Action:   "s3:GetObject",
+					Resource: "arn:aws:s3:::bucket/*",
+					Expect:   "allowed",
+				},
+				{
+					Name: "Multiple",
+					Actions: []string{
+						"s3:PutObject",
+						"s3:DeleteObject",
+					},
+					Resource: "arn:aws:s3:::bucket/*",
+					Expect:   "explicitDeny",
+				},
+			},
+			wantLen: 3, // 1 + 2
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := expandTestsWithActions(tt.input)
+			if len(result) != tt.wantLen {
+				t.Errorf("expandTestsWithActions() returned %d tests, want %d", len(result), tt.wantLen)
+			}
+
+			// Verify all expanded tests have Action set (not Actions)
+			for i, test := range result {
+				if test.Action == "" {
+					t.Errorf("expanded test[%d] has empty Action", i)
+				}
+				if len(test.Actions) > 0 {
+					t.Errorf("expanded test[%d] still has Actions array", i)
+				}
+			}
+		})
+	}
+}
+
+func TestExpandTestsWithActionsBothActionAndActions(t *testing.T) {
+	// Save original exiter
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	// Set mock exiter
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	tests := []TestCase{
+		{
+			Name:     "Invalid - both action and actions",
+			Action:   "s3:GetObject",
+			Actions:  []string{"s3:PutObject"},
+			Resource: "arn:aws:s3:::bucket/*",
+		},
+	}
+
+	// This should trigger Die()
+	_ = expandTestsWithActions(tests)
+
+	if !mockExit.called {
+		t.Error("expandTestsWithActions() did not call Die() when both action and actions are specified")
+	}
+	if mockExit.exitCode != 1 {
+		t.Errorf("expandTestsWithActions() called Exit with code %d, want 1", mockExit.exitCode)
+	}
+}
+
+func TestExpandTestsWithActionsNoAction(t *testing.T) {
+	// Save original exiter
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	// Set mock exiter
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	tests := []TestCase{
+		{
+			Name:     "Invalid - no action or actions",
+			Resource: "arn:aws:s3:::bucket/*",
+		},
+	}
+
+	// This should trigger Die()
+	_ = expandTestsWithActions(tests)
+
+	if !mockExit.called {
+		t.Error("expandTestsWithActions() did not call Die() when neither action nor actions are specified")
+	}
+	if mockExit.exitCode != 1 {
+		t.Errorf("expandTestsWithActions() called Exit with code %d, want 1", mockExit.exitCode)
+	}
+}
+
+func TestRunTestCollectionWithActionsArray(t *testing.T) {
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	callCount := 0
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			callCount++
+			action := params.ActionNames[0]
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+					},
+				},
+			}, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		Tests: []TestCase{
+			{
+				Name: "Multiple actions test",
+				Actions: []string{
+					"s3:GetObject",
+					"s3:PutObject",
+					"s3:ListBucket",
+				},
+				Resource: "arn:aws:s3:::bucket/*",
+				Expect:   "allowed",
+			},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	RunTestCollection(mockClient, scen, SimulatorConfig{PolicyJSON: policyJSON, ScenarioPath: scenarioPath, Variables: allVars})
+
+	// Should have called AWS API 3 times (one for each action)
+	if callCount != 3 {
+		t.Errorf("Expected 3 AWS API calls, got %d", callCount)
+	}
+
+	// Should not have exited
+	if mockExit.called {
+		t.Errorf("RunTestCollection() exited unexpectedly with code %d", mockExit.exitCode)
+	}
+}
