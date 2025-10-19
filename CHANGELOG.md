@@ -1,3 +1,9 @@
+## [1.1.1](https://github.com/reaandrew/politest/compare/v1.1.0...v1.1.1) (2025-10-19)
+
+### Bug Fixes
+
+* address code review feedback - improve validation and security ([4f08962](https://github.com/reaandrew/politest/commit/4f0896228e2d70e31b5a22802ace361aaae9f6b2))
+
 ## [1.1.0](https://github.com/reaandrew/politest/compare/v1.0.0...v1.1.0) (2025-10-18)
 
 ### Features
