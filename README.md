@@ -8,56 +8,69 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
 
 ## Features
 
-- **YAML-based scenarios** with inheritance via `extends:`
-- **Go template support** for dynamic values (`{{ .variable }}`)
-- **Policy templates** or pre-rendered JSON policies
-- **SCP merging** from multiple files/globs into permissions boundaries
-- **AWS IAM SimulateCustomPolicy** integration
-- **Expectation assertions** for CI/CD integration
-- **Clean table output** with optional raw JSON export
+- **YAML-based scenarios**
+  - Inheritance via `extends:`
+- **Go template support**
+  - Dynamic values (`{{ .variable }}`)
+- **Policy templates**
+  - Or pre-rendered JSON policies
+- **SCP merging**
+  - From multiple files/globs into permissions boundaries
+- **AWS IAM SimulateCustomPolicy integration**
+- **Expectation assertions**
+  - For CI/CD integration
+- **Clean table output**
+  - With optional raw JSON export
 
-## ⚠️ Important: Understanding What politest Tests
+## ⚠️ Understanding What politest Tests
 
-**politest is a pre-deployment validation tool, NOT a replacement for integration testing.**
+**politest is a pre-deployment validation tool that helps you catch IAM policy issues early, but it is NOT a replacement for integration testing in real AWS environments.**
 
 ### What politest Does
 
 politest uses AWS's `SimulateCustomPolicy` API to evaluate policies **before deployment**. This provides:
 
-✅ **Fast feedback loop** - Test policy changes in seconds without deploying
-✅ **Blended testing** - See how identity policies interact with SCPs/RCPs
-✅ **Fail fast** - Catch obvious misconfigurations early in development
-✅ **CI/CD integration** - Automated policy validation on every commit
+✅ **Fast feedback loop**
+  - Test policy changes in seconds without deploying
+
+✅ **Blended testing**
+  - See how identity policies interact with SCPs/RCPs
+
+✅ **Fail fast**
+  - Catch obvious misconfigurations early in development
+
+✅ **CI/CD integration**
+  - Automated policy validation on every commit
 
 ### Important Limitations
 
 ⚠️ **politest "bends the rules" for testing convenience:**
 
-- **SCPs/RCPs in SimulateCustomPolicy**: The API wasn't designed for testing organizational policies alongside identity policies. politest uses the `PermissionsBoundaryPolicyInputList` parameter to simulate SCP/RCP behavior, which **approximates** real-world behavior but may not be 100% accurate.
+- **SCPs/RCPs in SimulateCustomPolicy**
+  - The API wasn't designed for testing organizational policies alongside identity policies
+  - politest uses the `PermissionsBoundaryPolicyInputList` parameter to simulate SCP/RCP behavior
+  - This **approximates** real-world behavior but may not be 100% accurate
 
-- **Simulation vs Reality**: `SimulateCustomPolicy` provides a **best-effort simulation**. Some complex conditions, resource policy interactions, and edge cases may behave differently in production.
+- **Simulation vs Reality**
+  - `SimulateCustomPolicy` provides a **best-effort simulation**
+  - Some complex conditions, resource policy interactions, and edge cases may behave differently in production
 
-- **Missing Context**: Real AWS environments have additional factors (resource ownership, trust policies, session policies, permission boundaries) that may not be fully captured in simulation.
+- **Missing Context**
+  - Real AWS environments have additional factors not fully captured in simulation
+  - Resource ownership, trust policies, session policies, permission boundaries
 
 ### What You Still Need
 
-✅ **Integration testing in actual AWS accounts** - Deploy policies to dev/staging and test real resource access
-✅ **Production validation** - Verify permissions work as expected with real workloads
-✅ **Security reviews** - Have security teams review policies before production deployment
+✅ **Integration testing in actual AWS accounts**
+  - Deploy policies to dev/staging and test real resource access
 
-### Our Philosophy
+✅ **Production validation**
+  - Verify permissions work as expected with real workloads
 
-> **politest helps you fail faster, not fail less.**
+✅ **Security reviews**
+  - Have security teams review policies before production deployment
 
-Use politest to:
-- Catch obvious mistakes **before** deploying
-- Get **quick feedback** during policy development
-- Run **automated checks** in CI/CD pipelines
-- Review policies working **within organizational constraints**
-
-Then validate with real integration tests in your AWS accounts.
-
-Think of politest as **unit tests for IAM policies** - essential for development, but not sufficient alone.
+**Remember:** politest helps you **fail faster during development** by catching obvious mistakes before deployment. Use it as **unit tests for IAM policies** - essential for development velocity, but always validate with real integration tests in actual AWS environments.
 
 ## Installation
 
@@ -183,33 +196,48 @@ Flags:
 ### Required Fields
 
 - **One of:**
-  - `policy_template`: Path to a Go template file that renders to JSON
-  - `policy_json`: Path to a pre-rendered JSON policy file
-- `actions`: List of IAM actions to test (can use templates)
+  - `policy_template`
+    - Path to a Go template file that renders to JSON
+  - `policy_json`
+    - Path to a pre-rendered JSON policy file
+- `actions`
+  - List of IAM actions to test (can use templates)
 
 ### Optional Fields
 
-- `extends`: Path to parent scenario (supports inheritance)
-- `vars_file`: Path to YAML file with variables
-- `vars`: Inline variables (overrides vars_file)
-- `scp_paths`: List of SCP file paths or globs to merge
-- `resources`: List of resource ARNs (can use templates)
-- `context`: List of context entries for conditions
-- `expect`: Map of action → expected decision ("allowed" or "denied")
+- `extends`
+  - Path to parent scenario (supports inheritance)
+- `vars_file`
+  - Path to YAML file with variables
+- `vars`
+  - Inline variables (overrides vars_file)
+- `scp_paths`
+  - List of SCP file paths or globs to merge
+- `resources`
+  - List of resource ARNs (can use templates)
+- `context`
+  - List of context entries for conditions
+- `expect`
+  - Map of action → expected decision ("allowed" or "denied")
 
 ### Inheritance with `extends:`
 
 Child scenarios inherit all fields from parent and can override:
-- Variables are deep-merged (child overrides parent)
-- Other fields are completely replaced (not merged)
-- Relative paths are resolved from the scenario file's directory
+
+- **Variables**
+  - Deep-merged (child overrides parent)
+- **Other fields**
+  - Completely replaced (not merged)
+- **Relative paths**
+  - Resolved from the scenario file's directory
 
 ### Variables
 
 Variables can be defined in three places (priority order):
-1. Inline `vars:` in the scenario
-2. External `vars_file:` YAML
-3. Inherited from parent via `extends:`
+
+1. **Inline `vars:` in the scenario**
+2. **External `vars_file:` YAML**
+3. **Inherited from parent via `extends:`**
 
 Use Go template syntax: `{{ .variable_name }}`
 
@@ -223,12 +251,19 @@ context:
 ```
 
 **Supported Context Types:**
-- `string` - Single string value
-- `stringList` - List of strings
-- `numeric` - Single numeric value
-- `numericList` - List of numeric values
-- `boolean` - Single boolean value
-- `booleanList` - List of boolean values
+
+- `string`
+  - Single string value
+- `stringList`
+  - List of strings
+- `numeric`
+  - Single numeric value
+- `numericList`
+  - List of numeric values
+- `boolean`
+  - Single boolean value
+- `booleanList`
+  - List of boolean values
 
 **Note:** IpAddress and IpAddressList types are not supported by the AWS SDK.
 
@@ -258,9 +293,12 @@ athena:GetQueryExecution      allowed   PolicyInputList.1
 
 ### Exit Codes
 
-- `0`: Success (all expectations met or no expectations)
-- `1`: Error (invalid scenario, AWS error, etc.)
-- `2`: Expectation failures (unless `--no-assert` used)
+- `0`
+  - Success (all expectations met or no expectations)
+- `1`
+  - Error (invalid scenario, AWS error, etc.)
+- `2`
+  - Expectation failures (unless `--no-assert` used)
 
 ## Examples
 
@@ -333,9 +371,13 @@ expect:
 ## AWS Credentials
 
 The tool uses the AWS SDK v2 default credential chain:
-- Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
-- Shared credentials file (`~/.aws/credentials`)
-- IAM role (when running on EC2/ECS/Lambda)
+
+- **Environment variables**
+  - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- **Shared credentials file**
+  - `~/.aws/credentials`
+- **IAM role**
+  - When running on EC2/ECS/Lambda
 
 Required IAM permission: `iam:SimulateCustomPolicy`
 
@@ -391,12 +433,23 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
 
 ## Tips
 
-1. **Organize scenarios**: Use `_common.yml` for shared config, extend in specific tests
-2. **Use templates**: Policy templates with variables make tests reusable across accounts/regions
-3. **CI Integration**: Use `expect:` assertions and check exit codes
-4. **Debug**: Use `--save` to inspect raw AWS responses and examine `MatchedStatements`
-5. **Glob SCPs**: Use wildcards to merge multiple SCP files automatically
-6. **Case-insensitive decisions**: Expected decisions are compared case-insensitively (e.g., "allowed" matches "Allowed")
+1. **Organize scenarios**
+   - Use `_common.yml` for shared config, extend in specific tests
+
+2. **Use templates**
+   - Policy templates with variables make tests reusable across accounts/regions
+
+3. **CI Integration**
+   - Use `expect:` assertions and check exit codes
+
+4. **Debug**
+   - Use `--save` to inspect raw AWS responses and examine `MatchedStatements`
+
+5. **Glob SCPs**
+   - Use wildcards to merge multiple SCP files automatically
+
+6. **Case-insensitive decisions**
+   - Expected decisions are compared case-insensitively (e.g., "allowed" matches "Allowed")
 
 ## Project Structure Example
 

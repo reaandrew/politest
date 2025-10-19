@@ -1,0 +1,28 @@
+# CODEOWNERS - Define individuals or teams responsible for code in the repository
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+# Unless a later match takes precedence, these users will be requested for review
+* @reaandrew
+
+# GitHub Actions workflows and CI/CD configuration
+/.github/workflows/ @reaandrew
+
+# Documentation
+/docs/ @reaandrew
+*.md @reaandrew
+
+# Security and policy files
+/SECURITY.md @reaandrew
+/.github/ISSUE_TEMPLATE/ @reaandrew
+
+# Core application code
+/main.go @reaandrew
+/go.mod @reaandrew
+/go.sum @reaandrew
+
+# Test scenarios and policies
+/test/ @reaandrew
+
+# Pre-commit hooks
+/lefthook.yml @reaandrew
