@@ -4,8 +4,10 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"politest/internal"
 
@@ -13,17 +15,36 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 )
 
+// Build-time variables injected via -ldflags
+var (
+	version   = "dev"             // Semantic version (e.g., "v1.0.0")
+	gitCommit = "unknown"         // Full git commit SHA
+	buildDate = "unknown"         // ISO 8601 build timestamp
+	goVersion = runtime.Version() // Go compiler version
+)
+
 func main() {
 	var scenarioPath string
 	var savePath string
 	var noAssert bool
 	var noWarn bool
+	var showVersion bool
 
 	flag.StringVar(&scenarioPath, "scenario", "", "Path to scenario YAML")
 	flag.StringVar(&savePath, "save", "", "Path to save raw JSON response")
 	flag.BoolVar(&noAssert, "no-assert", false, "Do not fail on expectation mismatches")
 	flag.BoolVar(&noWarn, "no-warn", false, "Suppress SCP/RCP simulation approximation warning")
+	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
 	flag.Parse()
+
+	// Handle --version flag
+	if showVersion {
+		fmt.Printf("politest %s\n", version)
+		fmt.Printf("  commit:     %s\n", gitCommit)
+		fmt.Printf("  built:      %s\n", buildDate)
+		fmt.Printf("  go version: %s\n", goVersion)
+		os.Exit(0)
+	}
 
 	// Check for unknown flags
 	if flag.NArg() > 0 {
