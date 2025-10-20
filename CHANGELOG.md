@@ -1,3 +1,9 @@
+## [2.3.1](https://github.com/reaandrew/politest/compare/v2.3.0...v2.3.1) (2025-10-20)
+
+### Bug Fixes
+
+* allow GitGuardian to gracefully skip on fork PRs ([ba2c8be](https://github.com/reaandrew/politest/commit/ba2c8be7eb96a43d9739f677e635f660a7163175))
+
 ## [2.3.0](https://github.com/reaandrew/politest/compare/v2.2.0...v2.3.0) (2025-10-20)
 
 ### Features
