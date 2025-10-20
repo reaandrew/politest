@@ -1,3 +1,19 @@
+## [2.1.0](https://github.com/reaandrew/politest/compare/v2.0.0...v2.1.0) (2025-10-20)
+
+### Features
+
+* add example-tests CI job to run examples in parallel with integration tests ([927d6ca](https://github.com/reaandrew/politest/commit/927d6ca900c842b8ab8c957de5ab3e20295d4fc2))
+* add version injection and SLSA provenance generation ([7052f94](https://github.com/reaandrew/politest/commit/7052f94023685813d0c8617b344d4c550079e75c))
+* implement SLSA Level 3 provenance with official Go builder ([009d491](https://github.com/reaandrew/politest/commit/009d491c3ddfa8f25b117ac049346848181af71c))
+
+### Bug Fixes
+
+* use full commit SHA hashes for GitHub Actions dependencies ([5613349](https://github.com/reaandrew/politest/commit/56133493cfdf5914bb5a49c3cd710b21eca34580))
+
+### Performance Improvements
+
+* optimize Semgrep CI job for faster execution ([f3acf2e](https://github.com/reaandrew/politest/commit/f3acf2e8755115b145140420c941a2b314316d77))
+
 ## [2.0.0](https://github.com/reaandrew/politest/compare/v1.2.0...v2.0.0) (2025-10-20)
 
 ### ⚠ BREAKING CHANGES
