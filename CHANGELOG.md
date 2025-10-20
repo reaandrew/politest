@@ -1,3 +1,9 @@
+## [2.1.10](https://github.com/reaandrew/politest/compare/v2.1.9...v2.1.10) (2025-10-20)
+
+### Bug Fixes
+
+* trigger SLSA workflow on release published events ([694bd9b](https://github.com/reaandrew/politest/commit/694bd9be683685ad9c97527b99104fa522554799))
+
 ## [2.1.9](https://github.com/reaandrew/politest/compare/v2.1.8...v2.1.9) (2025-10-20)
 
 ### Bug Fixes
