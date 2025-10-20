@@ -1,3 +1,9 @@
+## [2.1.7](https://github.com/reaandrew/politest/compare/v2.1.6...v2.1.7) (2025-10-20)
+
+### Bug Fixes
+
+* use newline-separated environment variables in evaluated-envs ([0f437e3](https://github.com/reaandrew/politest/commit/0f437e3ded3524a4dada5acb2095ea315b4e1548))
+
 ## [2.1.6](https://github.com/reaandrew/politest/compare/v2.1.5...v2.1.6) (2025-10-20)
 
 ### Bug Fixes
