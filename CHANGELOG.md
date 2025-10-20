@@ -1,3 +1,9 @@
+## [2.1.8](https://github.com/reaandrew/politest/compare/v2.1.7...v2.1.8) (2025-10-20)
+
+### Bug Fixes
+
+* use GO-prefixed environment variable names for SLSA builder ([cc898f7](https://github.com/reaandrew/politest/commit/cc898f76bb28944294f5f26b71f47ff5cff8564a))
+
 ## [2.1.7](https://github.com/reaandrew/politest/compare/v2.1.6...v2.1.7) (2025-10-20)
 
 ### Bug Fixes
