@@ -411,9 +411,25 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: semantic-release
 
+  prepare-build-metadata:
+    name: Prepare Build Metadata
+    needs: [release]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      build_date: ${{ steps.date.outputs.date }}
+    steps:
+      - name: Format build date
+        id: date
+        run: |
+          # Convert to UTC with Z notation to avoid colons in timezone offset
+          BUILD_DATE=$(date -u -d "${{ github.event.head_commit.timestamp }}" +"%Y-%m-%dT%H:%M:%SZ")
+          echo "date=$BUILD_DATE" >> $GITHUB_OUTPUT
+          echo "Formatted build date: $BUILD_DATE"
+
   slsa-build-linux-amd64:
     name: SLSA Build linux-amd64
-    needs: [release]
+    needs: [prepare-build-metadata]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write  # To sign the provenance
@@ -424,12 +440,12 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/linux-amd64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ github.event.head_commit.timestamp }}"
+      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
 
   slsa-build-linux-arm64:
     name: SLSA Build linux-arm64
-    needs: [release]
+    needs: [prepare-build-metadata]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write
@@ -440,12 +456,12 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/linux-arm64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ github.event.head_commit.timestamp }}"
+      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
 
   slsa-build-darwin-amd64:
     name: SLSA Build darwin-amd64
-    needs: [release]
+    needs: [prepare-build-metadata]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write
@@ -456,12 +472,12 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/darwin-amd64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ github.event.head_commit.timestamp }}"
+      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
 
   slsa-build-darwin-arm64:
     name: SLSA Build darwin-arm64
-    needs: [release]
+    needs: [prepare-build-metadata]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write
@@ -472,12 +488,12 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/darwin-arm64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ github.event.head_commit.timestamp }}"
+      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
 
   slsa-build-windows-amd64:
     name: SLSA Build windows-amd64
-    needs: [release]
+    needs: [prepare-build-metadata]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write
@@ -488,12 +504,12 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/windows-amd64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ github.event.head_commit.timestamp }}"
+      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
 
   slsa-build-windows-arm64:
     name: SLSA Build windows-arm64
-    needs: [release]
+    needs: [prepare-build-metadata]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write
@@ -504,5 +520,5 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/windows-arm64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ github.event.head_commit.timestamp }}"
+      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
