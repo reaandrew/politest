@@ -1,3 +1,9 @@
+## [2.2.0](https://github.com/reaandrew/politest/compare/v2.1.11...v2.2.0) (2025-10-20)
+
+### Features
+
+* add GitHub native attestations to SLSA workflow ([81bbad5](https://github.com/reaandrew/politest/commit/81bbad5a03178a7d2539d553f196012f2620cdcc))
+
 ## [2.1.11](https://github.com/reaandrew/politest/compare/v2.1.10...v2.1.11) (2025-10-20)
 
 ### Bug Fixes
