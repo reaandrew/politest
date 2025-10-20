@@ -23,6 +23,14 @@ var (
 	goVersion = runtime.Version() // Go compiler version
 )
 
+// PrintVersion outputs version information to stdout
+func PrintVersion() {
+	fmt.Printf("politest %s\n", version)
+	fmt.Printf("  commit:     %s\n", gitCommit)
+	fmt.Printf("  built:      %s\n", buildDate)
+	fmt.Printf("  go version: %s\n", goVersion)
+}
+
 func main() {
 	var scenarioPath string
 	var savePath string
@@ -39,10 +47,7 @@ func main() {
 
 	// Handle --version flag
 	if showVersion {
-		fmt.Printf("politest %s\n", version)
-		fmt.Printf("  commit:     %s\n", gitCommit)
-		fmt.Printf("  built:      %s\n", buildDate)
-		fmt.Printf("  go version: %s\n", goVersion)
+		PrintVersion()
 		os.Exit(0)
 	}
 
