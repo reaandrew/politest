@@ -1,3 +1,9 @@
+## [2.3.0](https://github.com/reaandrew/politest/compare/v2.2.0...v2.3.0) (2025-10-20)
+
+### Features
+
+* make example-tests job output more verbose ([480259c](https://github.com/reaandrew/politest/commit/480259c5929036f2da54e56566c16d7f1270423f))
+
 ## [2.2.0](https://github.com/reaandrew/politest/compare/v2.1.11...v2.2.0) (2025-10-20)
 
 ### Features
