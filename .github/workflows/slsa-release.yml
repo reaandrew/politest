@@ -129,3 +129,58 @@ jobs:
       config-file: .slsa-goreleaser/windows-arm64.yml
       evaluated-envs: "GO_VERSION:${{ needs.prepare-build-metadata.outputs.version }}, GO_COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, GO_BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
+
+  github-attestations:
+    name: Generate GitHub Attestations
+    runs-on: ubuntu-latest
+    needs: [slsa-build-linux-amd64, slsa-build-linux-arm64, slsa-build-darwin-amd64, slsa-build-darwin-arm64, slsa-build-windows-amd64, slsa-build-windows-arm64]
+    permissions:
+      id-token: write  # For Sigstore signing
+      contents: write  # To read release assets
+      attestations: write  # To create attestations
+    steps:
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Download all binary assets from the release (not .intoto.jsonl files)
+          gh release download ${{ github.event.release.tag_name }} \
+            --repo ${{ github.repository }} \
+            --pattern 'politest-*' \
+            --skip-existing
+
+          # List downloaded files
+          ls -lh politest-*
+
+          # Exclude .intoto.jsonl files from attestation (they're already attestations)
+          rm -f *.intoto.jsonl || true
+
+      - name: Attest linux-amd64 binary
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
+        with:
+          subject-path: politest-linux-amd64
+
+      - name: Attest linux-arm64 binary
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
+        with:
+          subject-path: politest-linux-arm64
+
+      - name: Attest darwin-amd64 binary
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
+        with:
+          subject-path: politest-darwin-amd64
+
+      - name: Attest darwin-arm64 binary
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
+        with:
+          subject-path: politest-darwin-arm64
+
+      - name: Attest windows-amd64 binary
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
+        with:
+          subject-path: politest-windows-amd64
+
+      - name: Attest windows-arm64 binary
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
+        with:
+          subject-path: politest-windows-arm64
