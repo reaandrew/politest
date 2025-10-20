@@ -1,0 +1,124 @@
+name: SLSA Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.24'
+
+jobs:
+  prepare-build-metadata:
+    name: Prepare Build Metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      commit: ${{ steps.metadata.outputs.commit }}
+      build_date: ${{ steps.metadata.outputs.build_date }}
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Generate build metadata
+        id: metadata
+        run: |
+          # Extract version from tag (remove 'refs/tags/' prefix)
+          VERSION="${GITHUB_REF#refs/tags/}"
+
+          # Get commit SHA
+          COMMIT="${GITHUB_SHA}"
+
+          # Use ISO 8601 basic format without colons for SLSA compatibility
+          BUILD_DATE=$(date -u +%Y%m%dT%H%M%SZ)
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
+          echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
+          echo "Generated metadata: version=${VERSION}, commit=${COMMIT}, date=${BUILD_DATE}"
+
+  slsa-build-linux-amd64:
+    name: SLSA Build linux-amd64
+    needs: [prepare-build-metadata]
+    permissions:
+      id-token: write  # To sign the provenance
+      contents: write  # To upload assets to release
+      actions: read    # To read the workflow path
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
+    with:
+      go-version: "1.24"
+      config-file: .slsa-goreleaser/linux-amd64.yml
+      evaluated-envs: "GO_VERSION:${{ needs.prepare-build-metadata.outputs.version }}, GO_COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, GO_BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      upload-assets: true
+
+  slsa-build-linux-arm64:
+    name: SLSA Build linux-arm64
+    needs: [prepare-build-metadata]
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
+    with:
+      go-version: "1.24"
+      config-file: .slsa-goreleaser/linux-arm64.yml
+      evaluated-envs: "GO_VERSION:${{ needs.prepare-build-metadata.outputs.version }}, GO_COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, GO_BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      upload-assets: true
+
+  slsa-build-darwin-amd64:
+    name: SLSA Build darwin-amd64
+    needs: [prepare-build-metadata]
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
+    with:
+      go-version: "1.24"
+      config-file: .slsa-goreleaser/darwin-amd64.yml
+      evaluated-envs: "GO_VERSION:${{ needs.prepare-build-metadata.outputs.version }}, GO_COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, GO_BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      upload-assets: true
+
+  slsa-build-darwin-arm64:
+    name: SLSA Build darwin-arm64
+    needs: [prepare-build-metadata]
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
+    with:
+      go-version: "1.24"
+      config-file: .slsa-goreleaser/darwin-arm64.yml
+      evaluated-envs: "GO_VERSION:${{ needs.prepare-build-metadata.outputs.version }}, GO_COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, GO_BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      upload-assets: true
+
+  slsa-build-windows-amd64:
+    name: SLSA Build windows-amd64
+    needs: [prepare-build-metadata]
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
+    with:
+      go-version: "1.24"
+      config-file: .slsa-goreleaser/windows-amd64.yml
+      evaluated-envs: "GO_VERSION:${{ needs.prepare-build-metadata.outputs.version }}, GO_COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, GO_BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      upload-assets: true
+
+  slsa-build-windows-arm64:
+    name: SLSA Build windows-arm64
+    needs: [prepare-build-metadata]
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
+    with:
+      go-version: "1.24"
+      config-file: .slsa-goreleaser/windows-arm64.yml
+      evaluated-envs: "GO_VERSION:${{ needs.prepare-build-metadata.outputs.version }}, GO_COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, GO_BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      upload-assets: true
