@@ -1,3 +1,10 @@
+## [1.2.0](https://github.com/reaandrew/politest/compare/v1.1.1...v1.2.0) (2025-10-20)
+
+### Features
+
+* add actions array support and comprehensive examples ([a6d7e2e](https://github.com/reaandrew/politest/commit/a6d7e2e206c35fbc29619605fb9b67466614c286))
+* add support for ${VAR}, $VAR, and <VAR> variable formats ([cdc7435](https://github.com/reaandrew/politest/commit/cdc743557efc3b1c3bed0001a424f8363e5f3039))
+
 ## [1.1.1](https://github.com/reaandrew/politest/compare/v1.1.0...v1.1.1) (2025-10-19)
 
 ### Bug Fixes
