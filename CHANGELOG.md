@@ -1,3 +1,9 @@
+## [2.1.4](https://github.com/reaandrew/politest/compare/v2.1.3...v2.1.4) (2025-10-20)
+
+### Bug Fixes
+
+* use equals sign for SLSA evaluated-envs format ([57f786f](https://github.com/reaandrew/politest/commit/57f786ff6c63fe3963b7623941469e1fa8c135a1))
+
 ## [2.1.3](https://github.com/reaandrew/politest/compare/v2.1.2...v2.1.3) (2025-10-20)
 
 ### Bug Fixes
