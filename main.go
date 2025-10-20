@@ -143,33 +143,75 @@ func run(scenarioPath, savePath string, noAssert, noWarn bool) error {
 	return nil
 }
 
-func main() {
-	var scenarioPath string
-	var savePath string
-	var noAssert bool
-	var noWarn bool
-	var showVersion bool
+// cliFlags holds the parsed command-line flags
+type cliFlags struct {
+	scenarioPath string
+	savePath     string
+	noAssert     bool
+	noWarn       bool
+	showVersion  bool
+}
 
-	flag.StringVar(&scenarioPath, "scenario", "", "Path to scenario YAML")
-	flag.StringVar(&savePath, "save", "", "Path to save raw JSON response")
-	flag.BoolVar(&noAssert, "no-assert", false, "Do not fail on expectation mismatches")
-	flag.BoolVar(&noWarn, "no-warn", false, "Suppress SCP/RCP simulation approximation warning")
-	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
-	flag.Parse()
+// parseFlags parses command-line arguments and returns flags or error
+func parseFlags(args []string) (*cliFlags, []string, error) {
+	fs := flag.NewFlagSet("politest", flag.ContinueOnError)
 
-	// Handle --version flag
-	if showVersion {
-		PrintVersion()
-		os.Exit(0)
+	flags := &cliFlags{}
+
+	fs.StringVar(&flags.scenarioPath, "scenario", "", "Path to scenario YAML")
+	fs.StringVar(&flags.savePath, "save", "", "Path to save raw JSON response")
+	fs.BoolVar(&flags.noAssert, "no-assert", false, "Do not fail on expectation mismatches")
+	fs.BoolVar(&flags.noWarn, "no-warn", false, "Suppress SCP/RCP simulation approximation warning")
+	fs.BoolVar(&flags.showVersion, "version", false, "Show version information and exit")
+
+	if err := fs.Parse(args); err != nil {
+		return nil, nil, err
 	}
 
-	// Check for unknown flags
-	if flag.NArg() > 0 {
-		internal.Die("unknown arguments: %v\nUse -h or --help for usage information", flag.Args())
+	return flags, fs.Args(), nil
+}
+
+// validateArgs checks for unknown positional arguments
+func validateArgs(args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("unknown arguments: %v\nUse -h or --help for usage information", args)
+	}
+	return nil
+}
+
+// realMain contains the full main logic and returns an exit code
+// This allows testing without calling os.Exit
+func realMain(args []string) int {
+	flags, remainingArgs, err := parseFlags(args)
+	if err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
+		return 1
+	}
+
+	// Handle --version flag
+	if flags.showVersion {
+		PrintVersion()
+		return 0
+	}
+
+	// Validate no unknown arguments
+	if err := validateArgs(remainingArgs); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
 	}
 
 	// Run main logic
-	if err := run(scenarioPath, savePath, noAssert, noWarn); err != nil {
-		internal.Die("%v", err)
+	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
 	}
+
+	return 0
+}
+
+func main() {
+	os.Exit(realMain(os.Args[1:]))
 }

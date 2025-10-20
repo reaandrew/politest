@@ -275,3 +275,217 @@ tests: []
 		t.Errorf("Expected error about empty tests array, got: %v", err)
 	}
 }
+
+func TestParseFlags(t *testing.T) {
+	tests := []struct {
+		name         string
+		args         []string
+		wantScenario string
+		wantSave     string
+		wantNoAssert bool
+		wantNoWarn   bool
+		wantVersion  bool
+		wantErr      bool
+	}{
+		{
+			name:         "all flags",
+			args:         []string{"--scenario", "test.yml", "--save", "out.json", "--no-assert", "--no-warn", "--version"},
+			wantScenario: "test.yml",
+			wantSave:     "out.json",
+			wantNoAssert: true,
+			wantNoWarn:   true,
+			wantVersion:  true,
+		},
+		{
+			name:         "only scenario",
+			args:         []string{"--scenario", "test.yml"},
+			wantScenario: "test.yml",
+		},
+		{
+			name:         "short flags",
+			args:         []string{"-scenario", "test.yml", "-version"},
+			wantScenario: "test.yml",
+			wantVersion:  true,
+		},
+		{
+			name: "no flags",
+			args: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flags, _, err := parseFlags(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseFlags() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil {
+				return
+			}
+
+			if flags.scenarioPath != tt.wantScenario {
+				t.Errorf("scenarioPath = %v, want %v", flags.scenarioPath, tt.wantScenario)
+			}
+			if flags.savePath != tt.wantSave {
+				t.Errorf("savePath = %v, want %v", flags.savePath, tt.wantSave)
+			}
+			if flags.noAssert != tt.wantNoAssert {
+				t.Errorf("noAssert = %v, want %v", flags.noAssert, tt.wantNoAssert)
+			}
+			if flags.noWarn != tt.wantNoWarn {
+				t.Errorf("noWarn = %v, want %v", flags.noWarn, tt.wantNoWarn)
+			}
+			if flags.showVersion != tt.wantVersion {
+				t.Errorf("showVersion = %v, want %v", flags.showVersion, tt.wantVersion)
+			}
+		})
+	}
+}
+
+func TestParseFlagsWithRemainingArgs(t *testing.T) {
+	flags, remaining, err := parseFlags([]string{"--scenario", "test.yml", "extra", "args"})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if flags.scenarioPath != "test.yml" {
+		t.Errorf("Expected scenario 'test.yml', got %v", flags.scenarioPath)
+	}
+
+	if len(remaining) != 2 {
+		t.Errorf("Expected 2 remaining args, got %d", len(remaining))
+	}
+
+	if remaining[0] != "extra" || remaining[1] != "args" {
+		t.Errorf("Expected remaining args [extra args], got %v", remaining)
+	}
+}
+
+func TestValidateArgs(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr bool
+	}{
+		{
+			name:    "no args - valid",
+			args:    []string{},
+			wantErr: false,
+		},
+		{
+			name:    "one arg - invalid",
+			args:    []string{"extra"},
+			wantErr: true,
+		},
+		{
+			name:    "multiple args - invalid",
+			args:    []string{"extra", "args"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateArgs(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateArgs() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if err != nil && !strings.Contains(err.Error(), "unknown arguments") {
+				t.Errorf("Expected error to contain 'unknown arguments', got: %v", err)
+			}
+		})
+	}
+}
+
+func TestRealMainVersion(t *testing.T) {
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode := realMain([]string{"--version"})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0, got %d", exitCode)
+	}
+
+	if !strings.Contains(output, "politest") {
+		t.Errorf("Expected version output to contain 'politest', got: %s", output)
+	}
+}
+
+func TestRealMainUnknownArgs(t *testing.T) {
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	exitCode := realMain([]string{"--scenario", "test.yml", "extra"})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	if exitCode != 1 {
+		t.Errorf("Expected exit code 1, got %d", exitCode)
+	}
+
+	if !strings.Contains(output, "unknown arguments") {
+		t.Errorf("Expected error about unknown arguments, got: %s", output)
+	}
+}
+
+func TestRealMainMissingScenario(t *testing.T) {
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	exitCode := realMain([]string{})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	if exitCode != 1 {
+		t.Errorf("Expected exit code 1, got %d", exitCode)
+	}
+
+	if !strings.Contains(output, "missing --scenario") {
+		t.Errorf("Expected error about missing scenario, got: %s", output)
+	}
+}
+
+func TestRealMainInvalidScenario(t *testing.T) {
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	exitCode := realMain([]string{"--scenario", "/nonexistent/file.yml"})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+
+	if exitCode != 1 {
+		t.Errorf("Expected exit code 1, got %d", exitCode)
+	}
+}
