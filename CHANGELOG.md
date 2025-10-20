@@ -1,3 +1,9 @@
+## [2.1.9](https://github.com/reaandrew/politest/compare/v2.1.8...v2.1.9) (2025-10-20)
+
+### Bug Fixes
+
+* use ISO 8601 basic format for build dates in SLSA workflow ([188925f](https://github.com/reaandrew/politest/commit/188925fbdbbeefba5e928af41b583352df979c61))
+
 ## [2.1.8](https://github.com/reaandrew/politest/compare/v2.1.7...v2.1.8) (2025-10-20)
 
 ### Bug Fixes
