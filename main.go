@@ -32,9 +32,9 @@ func PrintVersion() {
 }
 
 // run contains the main application logic and returns an error instead of calling Die()
-func run(scenarioPath, savePath string, noAssert, noWarn bool) error {
+func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 	if scenarioPath == "" {
-		return fmt.Errorf("missing --scenario\nUsage: politest --scenario <path> [--save <path>] [--no-assert] [--no-warn]")
+		return fmt.Errorf("missing --scenario\nUsage: politest --scenario <path> [--save <path>] [--no-assert] [--no-warn] [--debug]")
 	}
 
 	absScenario, err := filepath.Abs(scenarioPath)
@@ -42,9 +42,17 @@ func run(scenarioPath, savePath string, noAssert, noWarn bool) error {
 		return err
 	}
 
+	if debug {
+		fmt.Printf("🔍 DEBUG: Loading scenario from: %s\n", absScenario)
+	}
+
 	scen, err := internal.LoadScenarioWithExtends(absScenario)
 	if err != nil {
 		return err
+	}
+
+	if debug && scen.Extends != "" {
+		fmt.Printf("🔍 DEBUG: Scenario extends: %s\n", scen.Extends)
 	}
 
 	// Build vars: vars_file (if present), then inline vars override
@@ -52,6 +60,9 @@ func run(scenarioPath, savePath string, noAssert, noWarn bool) error {
 	if scen.VarsFile != "" {
 		base := filepath.Dir(absScenario)
 		vf := internal.MustAbsJoin(base, scen.VarsFile)
+		if debug {
+			fmt.Printf("🔍 DEBUG: Loading variables from: %s\n", vf)
+		}
 		vmap := map[string]any{}
 		if err := internal.LoadYAML(vf, &vmap); err != nil {
 			return err
@@ -64,6 +75,13 @@ func run(scenarioPath, savePath string, noAssert, noWarn bool) error {
 		allVars[k] = v
 	}
 
+	if debug && len(allVars) > 0 {
+		fmt.Printf("🔍 DEBUG: Variables available:\n")
+		for k, v := range allVars {
+			fmt.Printf("  - %s = %v\n", k, v)
+		}
+	}
+
 	// Policy document: template or pre-rendered JSON
 	var policyJSON string
 	switch {
@@ -72,6 +90,9 @@ func run(scenarioPath, savePath string, noAssert, noWarn bool) error {
 	case scen.PolicyJSON != "":
 		base := filepath.Dir(absScenario)
 		p := internal.MustAbsJoin(base, scen.PolicyJSON)
+		if debug {
+			fmt.Printf("🔍 DEBUG: Loading policy from: %s\n", p)
+		}
 		b, err := os.ReadFile(p)
 		if err != nil {
 			return err
@@ -80,15 +101,28 @@ func run(scenarioPath, savePath string, noAssert, noWarn bool) error {
 	case scen.PolicyTemplate != "":
 		base := filepath.Dir(absScenario)
 		tplPath := internal.MustAbsJoin(base, scen.PolicyTemplate)
+		if debug {
+			fmt.Printf("🔍 DEBUG: Loading policy template from: %s\n", tplPath)
+		}
 		policyJSON = internal.RenderTemplateFileJSON(tplPath, allVars)
 	default:
 		return fmt.Errorf("scenario must include 'policy_json' or 'policy_template'")
+	}
+
+	if debug {
+		fmt.Printf("🔍 DEBUG: Rendered policy (minified):\n%s\n", policyJSON)
 	}
 
 	// Merge SCPs (permissions boundary)
 	var pbJSON string
 	if len(scen.SCPPaths) > 0 {
 		files := internal.ExpandGlobsRelative(filepath.Dir(absScenario), scen.SCPPaths)
+		if debug {
+			fmt.Printf("🔍 DEBUG: Loading SCP/RCP files:\n")
+			for _, f := range files {
+				fmt.Printf("  - %s\n", f)
+			}
+		}
 		merged := internal.MergeSCPFiles(files)
 		pbJSON = internal.ToJSONMin(merged)
 
@@ -106,6 +140,9 @@ func run(scenarioPath, savePath string, noAssert, noWarn bool) error {
 	case scen.ResourcePolicyJSON != "":
 		base := filepath.Dir(absScenario)
 		p := internal.MustAbsJoin(base, scen.ResourcePolicyJSON)
+		if debug {
+			fmt.Printf("🔍 DEBUG: Loading resource policy from: %s\n", p)
+		}
 		b, err := os.ReadFile(p)
 		if err != nil {
 			return err
@@ -114,7 +151,14 @@ func run(scenarioPath, savePath string, noAssert, noWarn bool) error {
 	case scen.ResourcePolicyTemplate != "":
 		base := filepath.Dir(absScenario)
 		tplPath := internal.MustAbsJoin(base, scen.ResourcePolicyTemplate)
+		if debug {
+			fmt.Printf("🔍 DEBUG: Loading resource policy template from: %s\n", tplPath)
+		}
 		resourcePolicyJSON = internal.RenderTemplateFileJSON(tplPath, allVars)
+	}
+
+	if debug && resourcePolicyJSON != "" {
+		fmt.Printf("🔍 DEBUG: Rendered resource policy (minified):\n%s\n", resourcePolicyJSON)
 	}
 
 	// AWS client setup
@@ -150,6 +194,7 @@ type cliFlags struct {
 	noAssert     bool
 	noWarn       bool
 	showVersion  bool
+	debug        bool
 }
 
 // parseFlags parses command-line arguments and returns flags or error
@@ -162,6 +207,7 @@ func parseFlags(args []string) (*cliFlags, []string, error) {
 	fs.StringVar(&flags.savePath, "save", "", "Path to save raw JSON response")
 	fs.BoolVar(&flags.noAssert, "no-assert", false, "Do not fail on expectation mismatches")
 	fs.BoolVar(&flags.noWarn, "no-warn", false, "Suppress SCP/RCP simulation approximation warning")
+	fs.BoolVar(&flags.debug, "debug", false, "Show debug output (files loaded, variables, rendered policies)")
 	fs.BoolVar(&flags.showVersion, "version", false, "Show version information and exit")
 
 	if err := fs.Parse(args); err != nil {
@@ -204,7 +250,7 @@ func realMain(args []string) int {
 	}
 
 	// Run main logic
-	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn); err != nil {
+	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn, flags.debug); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}

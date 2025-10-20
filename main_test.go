@@ -177,7 +177,7 @@ func TestUnknownArguments(t *testing.T) {
 
 func TestRunMissingScenario(t *testing.T) {
 	// Test run() with empty scenario path
-	err := run("", "", false, false)
+	err := run("", "", false, false, false)
 	if err == nil {
 		t.Error("Expected error when scenario path is empty")
 	}
@@ -189,7 +189,7 @@ func TestRunMissingScenario(t *testing.T) {
 
 func TestRunInvalidScenarioFile(t *testing.T) {
 	// Test run() with non-existent scenario file
-	err := run("/nonexistent/scenario.yml", "", false, false)
+	err := run("/nonexistent/scenario.yml", "", false, false, false)
 	if err == nil {
 		t.Error("Expected error when scenario file does not exist")
 	}
@@ -212,7 +212,7 @@ tests:
 		t.Fatalf("Failed to create scenario file: %v", err)
 	}
 
-	err := run(scenarioPath, "", false, false)
+	err := run(scenarioPath, "", false, false, false)
 	if err == nil {
 		t.Error("Expected error when both policy_json and policy_template are specified")
 	}
@@ -237,7 +237,7 @@ func TestRunMissingPolicyFields(t *testing.T) {
 		t.Fatalf("Failed to create scenario file: %v", err)
 	}
 
-	err := run(scenarioPath, "", false, false)
+	err := run(scenarioPath, "", false, false, false)
 	if err == nil {
 		t.Error("Expected error when neither policy_json nor policy_template is specified")
 	}
@@ -266,7 +266,7 @@ tests: []
 		t.Fatalf("Failed to create scenario file: %v", err)
 	}
 
-	err := run(scenarioPath, "", false, false)
+	err := run(scenarioPath, "", false, false, false)
 	if err == nil {
 		t.Error("Expected error when tests array is empty")
 	}
