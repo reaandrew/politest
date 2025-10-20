@@ -3,6 +3,7 @@
 ## Table of Contents
 
 - [Getting Started](#getting-started)
+- [Understanding What politest Tests](#️-understanding-what-politest-tests)
 - [Scenario Configuration](#scenario-configuration)
 - [Variable Formats](#variable-formats)
 - [Policy Fields](#policy-fields)
@@ -45,6 +46,58 @@ go run . --scenario path/to/scenario.yml
 ```bash
 politest --scenario scenarios/my-test.yml
 ```
+
+---
+
+## ⚠️ Understanding What politest Tests
+
+**politest is a pre-deployment validation tool that helps you catch IAM policy issues early, but it is NOT a replacement for integration testing in real AWS environments.**
+
+### What politest Does
+
+politest uses AWS's `SimulateCustomPolicy` API to evaluate policies **before deployment**. This provides:
+
+✅ **Fast feedback loop**
+  - Test policy changes in seconds without deploying
+
+✅ **Blended testing**
+  - See how identity policies interact with SCPs/RCPs
+
+✅ **Fail fast**
+  - Catch obvious misconfigurations early in development
+
+✅ **CI/CD integration**
+  - Automated policy validation on every commit
+
+### Important Limitations
+
+⚠️ **politest "bends the rules" for testing convenience:**
+
+- **SCPs/RCPs in SimulateCustomPolicy**
+  - The API wasn't designed for testing organizational policies alongside identity policies
+  - politest uses the `PermissionsBoundaryPolicyInputList` parameter to simulate SCP/RCP behavior
+  - This **approximates** real-world behavior but may not be 100% accurate
+
+- **Simulation vs Reality**
+  - `SimulateCustomPolicy` provides a **best-effort simulation**
+  - Some complex conditions, resource policy interactions, and edge cases may behave differently in production
+
+- **Missing Context**
+  - Real AWS environments have additional factors not fully captured in simulation
+  - Resource ownership, trust policies, session policies, permission boundaries
+
+### What You Still Need
+
+✅ **Integration testing in actual AWS accounts**
+  - Deploy policies to dev/staging and test real resource access
+
+✅ **Production validation**
+  - Verify permissions work as expected with real workloads
+
+✅ **Security reviews**
+  - Have security teams review policies before production deployment
+
+**Remember:** politest helps you **fail faster during development** by catching obvious mistakes before deployment. Use it as **unit tests for IAM policies** - essential for development velocity, but always validate with real integration tests in actual AWS environments.
 
 ---
 
