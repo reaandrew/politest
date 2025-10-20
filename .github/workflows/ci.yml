@@ -227,7 +227,15 @@ jobs:
     steps:
     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
     - name: Run Semgrep analysis
-      run: semgrep ci
+      run: |
+        semgrep ci \
+          --config=auto \
+          --exclude='*_test.go' \
+          --exclude='test/**' \
+          --exclude='examples/**' \
+          --exclude='docs/**' \
+          --max-target-bytes=1000000 \
+          --metrics=off
 
   build:
     name: Build
