@@ -1,3 +1,9 @@
+## [2.1.2](https://github.com/reaandrew/politest/compare/v2.1.1...v2.1.2) (2025-10-20)
+
+### Bug Fixes
+
+* format build date for SLSA evaluated-envs compatibility ([9d1043b](https://github.com/reaandrew/politest/commit/9d1043b9f27e1242b01fad71725aa217dd09bad5))
+
 ## [2.1.1](https://github.com/reaandrew/politest/compare/v2.1.0...v2.1.1) (2025-10-20)
 
 ### Bug Fixes
