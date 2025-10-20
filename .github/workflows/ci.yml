@@ -254,7 +254,7 @@ jobs:
     - name: Build
       run: |
         VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-        BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        BUILD_DATE=$(date -u +%Y%m%dT%H%M%SZ)
         GIT_COMMIT=${{ github.sha }}
 
         go build -v -o politest \
@@ -292,7 +292,7 @@ jobs:
     - name: Build politest
       run: |
         VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-        BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        BUILD_DATE=$(date -u +%Y%m%dT%H%M%SZ)
         GIT_COMMIT=${{ github.sha }}
 
         go build -o politest \
@@ -333,7 +333,7 @@ jobs:
     - name: Build politest
       run: |
         VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-        BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        BUILD_DATE=$(date -u +%Y%m%dT%H%M%SZ)
         GIT_COMMIT=${{ github.sha }}
 
         go build -o politest \
@@ -425,7 +425,8 @@ jobs:
         id: metadata
         run: |
           # Generate individual metadata values (no spaces in values)
-          BUILD_DATE=$(date -u -d "${{ github.event.head_commit.timestamp }}" +"%Y-%m-%dT%H:%M:%SZ")
+          # Use ISO 8601 basic format without colons for SLSA compatibility
+          BUILD_DATE=$(date -u -d "${{ github.event.head_commit.timestamp }}" +"%Y%m%dT%H%M%SZ")
           echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           echo "commit=${{ github.sha }}" >> $GITHUB_OUTPUT
           echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
