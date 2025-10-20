@@ -5,15 +5,13 @@ Complete YAML schema reference for politest scenario files.
 ## Table of Contents
 
 - [Scenario Schema](#scenario-schema)
-- [Legacy Format Fields](#legacy-format-fields)
-- [Collection Format Fields](#collection-format-fields)
 - [Test Case Schema](#test-case-schema)
 - [Context Entry Schema](#context-entry-schema)
 - [Command Line Options](#command-line-options)
 
 ## Scenario Schema
 
-Top-level fields available in both legacy and collection formats.
+Top-level fields available in scenario files.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -28,6 +26,8 @@ Top-level fields available in both legacy and collection formats.
 | `resource_owner` | string | No | Account ARN that owns the resource |
 | `resource_handling_option` | string | No | EC2 scenario type |
 | `scp_paths` | []string | No | Paths to SCP/RCP JSON files (supports globs) |
+| `context` | []ContextEntry | No | Global IAM condition context for all tests |
+| `tests` | []TestCase | Yes | Array of test cases to execute |
 
 \* Either `policy_template` or `policy_json` is required (mutually exclusive)
 
@@ -35,8 +35,8 @@ Top-level fields available in both legacy and collection formats.
 
 When using `extends`, child scenarios merge with parent:
 
-- **Maps** (`vars`, `expect`): Deep-merged (child overrides parent keys)
-- **Arrays** (`actions`, `resources`, `scp_paths`, `tests`): Replaced entirely
+- **Maps** (`vars`): Deep-merged (child overrides parent keys)
+- **Arrays** (`scp_paths`, `tests`, `context`): Replaced entirely
 - **Scalars**: Child overrides parent
 
 **Example:**
@@ -46,8 +46,10 @@ When using `extends`, child scenarios merge with parent:
 vars:
   bucket: "parent-bucket"
   region: "us-east-1"
-actions:
-  - "s3:GetObject"
+tests:
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.bucket}}/*"
+    expect: "allowed"
 ```
 
 ```yaml
@@ -56,56 +58,11 @@ extends: "parent.yml"
 vars:
   bucket: "child-bucket"  # Overrides
   # region: us-east-1 inherited
-actions:
-  - "s3:PutObject"  # Replaces parent actions entirely
-```
-
-## Legacy Format Fields
-
-Fields specific to legacy format (mutually exclusive with `tests`).
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `actions` | []string | Yes* | List of IAM actions to test |
-| `resources` | []string | No | List of resource ARNs (defaults to `["*"]`) |
-| `context` | []ContextEntry | No | IAM condition context (global for all actions) |
-| `expect` | map[string]string | Yes* | Map of action → expected decision |
-
-\* Required in legacy format
-
-**Example:**
-
-```yaml
-policy_json: "policy.json"
-actions:
-  - "s3:GetObject"
-  - "s3:PutObject"
-resources:
-  - "arn:aws:s3:::bucket/*"
-expect:
-  "s3:GetObject": "allowed"
-  "s3:PutObject": "implicitDeny"
-```
-
-## Collection Format Fields
-
-Fields specific to collection format (mutually exclusive with legacy fields).
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `tests` | []TestCase | Yes* | Array of test cases |
-
-\* Required in collection format
-
-**Example:**
-
-```yaml
-policy_json: "policy.json"
 tests:
-  - name: "GetObject allowed"
-    action: "s3:GetObject"
-    resource: "arn:aws:s3:::bucket/*"
+  - action: "s3:PutObject"
+    resource: "arn:aws:s3:::{{.bucket}}/*"
     expect: "allowed"
+  # Replaces parent tests entirely
 ```
 
 ## Test Case Schema
@@ -115,7 +72,8 @@ Fields available in each test within the `tests` array.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | No | Test description (auto-generated if omitted) |
-| `action` | string | Yes | Single IAM action to test |
+| `action` | string | No* | Single IAM action to test |
+| `actions` | []string | No* | Multiple IAM actions (expands to separate tests) |
 | `resource` | string | No** | Single resource ARN |
 | `resources` | []string | No** | Multiple resource ARNs |
 | `context` | []ContextEntry | No | IAM condition context for this test |
@@ -126,7 +84,34 @@ Fields available in each test within the `tests` array.
 | `resource_owner` | string | No | Override resource owner for this test |
 | `resource_handling_option` | string | No | Override handling option for this test |
 
+\* Either `action` or `actions` is required (mutually exclusive)
+
 \*\* Either `resource` or `resources` should be provided (defaults to `["*"]`)
+
+### Actions Array Expansion
+
+The `actions` field automatically expands into multiple separate tests - one per action. All other test properties (resource, context, expect, etc.) are copied to each expanded test.
+
+**Example:**
+
+```yaml
+tests:
+  # This single test definition...
+  - name: "Test S3 read operations"
+    actions:
+      - "s3:GetObject"
+      - "s3:ListBucket"
+      - "s3:GetObjectVersion"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "allowed"
+
+  # ...expands to 3 separate tests:
+  # [1/3] Test S3 read operations (s3:GetObject)
+  # [2/3] Test S3 read operations (s3:ListBucket)
+  # [3/3] Test S3 read operations (s3:GetObjectVersion)
+```
+
+This is useful for testing multiple similar actions with the same configuration.
 
 ### Expected Decisions
 
@@ -170,7 +155,7 @@ IAM condition context for testing policies with Condition elements.
 | `stringList` | String (multi-value) | `["value1", "value2"]` |
 | `numeric` | Numeric | `["100"]` |
 | `numericList` | Numeric (multi-value) | `["100", "200"]` |
-| `boolean` | Boolean | `["true"]` or `["false"]` |
+| `boolean` | Boolean | `["true"]` |
 | `booleanList` | Boolean (multi-value) | `["true", "false"]` |
 
 **Note:** `ipAddress` and `ipAddressList` types are **not supported** by AWS SDK v2 for Go.
@@ -222,10 +207,15 @@ caller_arn: "arn:aws:iam::{{.account_id}}:user/alice"
 For EC2-specific scenarios (rarely used):
 
 - `EC2-Classic-InstanceStore`
+
 - `EC2-Classic-EBS`
+
 - `EC2-VPC-InstanceStore`
+
 - `EC2-VPC-InstanceStore-Subnet`
+
 - `EC2-VPC-EBS`
+
 - `EC2-VPC-EBS-Subnet`
 
 **Example:**
@@ -303,9 +293,13 @@ scp_paths:
 ```
 
 **Glob expansion:**
+
 - `*` - Match any characters
+
 - `**` - Recursive directory match
+
 - `?` - Match single character
+
 - `[abc]` - Match character set
 
 ## Complete Example
@@ -361,21 +355,27 @@ tests:
 ### Mutual Exclusivity
 
 - `policy_template` XOR `policy_json` (one required)
+
 - `resource_policy_template` XOR `resource_policy_json` (both optional)
-- Legacy format (`actions`, `expect`) XOR Collection format (`tests`)
+
+- `action` XOR `actions` in each test (one required per test)
 
 ### Required Combinations
 
 - If using `resource_policy_*`, must provide `caller_arn`
+
 - If using `extends`, parent file must exist and be valid YAML
-- Each test must have `action` and `expect`
+
+- Each test must have either `action` or `actions`, and must have `expect`
 
 ## Next Steps
 
 - **[See Examples](https://github.com/reaandrew/politest/tree/main/test/scenarios)** - 18 working scenarios
+
 - **[Troubleshooting](Troubleshooting)** - Common errors and solutions
+
 - **[Advanced Patterns](Advanced-Patterns)** - Complex use cases
 
 ---
 
-**Full schema validation:** See [`main.go` Scenario struct](https://github.com/reaandrew/politest/blob/main/main.go) →
+**Full schema validation:** See [`internal/types.go` Scenario struct](https://github.com/reaandrew/politest/blob/main/internal/types.go) →

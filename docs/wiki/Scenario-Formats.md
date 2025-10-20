@@ -1,121 +1,76 @@
 # Scenario Formats
 
-politest supports two scenario formats: **Legacy Format** and **Collection Format**. This guide explains when to use each and how they work.
+politest uses a collection format for defining test scenarios. This guide explains the structure and features available.
 
 ## Table of Contents
 
-- [Quick Comparison](#quick-comparison)
-- [Legacy Format](#legacy-format)
-- [Collection Format](#collection-format)
-- [Choosing the Right Format](#choosing-the-right-format)
-- [Mixing Formats](#mixing-formats)
+- [Basic Structure](#basic-structure)
 
-## Quick Comparison
+- [Test Cases](#test-cases)
 
-| Feature | Legacy Format | Collection Format |
-|---------|--------------|-------------------|
-| **Use Case** | Quick tests, same resource | Complex scenarios, multiple resources |
-| **Test Names** | Auto-generated | Custom (optional) |
-| **Resource per Test** | Shared across all actions | Individual per test |
-| **Context per Test** | ❌ No | ✓ Yes |
-| **Override Policies per Test** | ❌ No | ✓ Yes |
-| **Readability** | Good for simple cases | Excellent for complex cases |
+- [Actions Array Expansion](#actions-array-expansion)
 
-## Legacy Format
+- [Optional Test Names](#optional-test-names)
 
-The legacy format is ideal for **quick testing** of multiple actions against the same resources.
+- [Advanced Features](#advanced-features)
 
-### Structure
+## Basic Structure
+
+Every scenario file contains:
+
+1. **Policy definition** (identity policy)
+
+2. **Tests array** (required - one or more test cases)
+
+3. **Optional configuration** (SCPs, variables, resource policies, etc.)
 
 ```yaml
-policy_json: "path/to/policy.json"  # Or policy_template
-scp_paths:                          # Optional
-  - "path/to/scp.json"
-actions:                             # List of actions to test
-  - "s3:GetObject"
-  - "s3:PutObject"
-resources:                           # List of resources (tested with each action)
-  - "arn:aws:s3:::bucket/*"
-expect:                              # Map of action → expected decision
-  "s3:GetObject": "allowed"
-  "s3:PutObject": "implicitDeny"
+# Identity policy (required - choose one)
+policy_json: "path/to/policy.json"  # OR
+policy_template: "path/to/policy.json.tpl"
+
+# Optional global configuration
+vars_file: "vars/common.yml"
+vars:
+  account_id: "123456789012"
+
+scp_paths:
+  - "../scp/*.json"
+
+context:
+  - ContextKeyName: "aws:RequestedRegion"
+    ContextKeyType: "string"
+    ContextKeyValues: ["us-east-1"]
+
+# Tests (required)
+tests:
+  - name: "Test description"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "allowed"
 ```
 
-### Real Example
+## Test Cases
 
-From [`test/scenarios/01-policy-allows-no-boundaries.yml`](https://github.com/reaandrew/politest/blob/main/test/scenarios/01-policy-allows-no-boundaries.yml):
+Each test in the `tests` array specifies:
 
-```yaml
-# Test: Policy allows S3, no SCPs/RCPs to block it
-# Expected: All S3 actions allowed
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | No | Descriptive test name (auto-generated if omitted) |
+| `action` | Yes* | Single IAM action to test |
+| `actions` | Yes* | Multiple IAM actions (expands to separate tests) |
+| `resource` | No | Single resource ARN (defaults to `*`) |
+| `resources` | No | Multiple resource ARNs |
+| `context` | No | IAM condition context for this test |
+| `expect` | Yes | Expected decision: `allowed`, `implicitDeny`, or `explicitDeny` |
 
-policy_json: "../policies/allow-s3.json"
+\* Either `action` or `actions` is required (mutually exclusive)
 
-actions:
-  - "s3:GetObject"
-  - "s3:PutObject"
-  - "s3:ListBucket"
-
-resources:
-  - "arn:aws:s3:::test-bucket/*"
-
-expect:
-  "s3:GetObject": "allowed"
-  "s3:PutObject": "allowed"
-  "s3:ListBucket": "allowed"
-```
-
-**How it works:**
-- Tests each action (`s3:GetObject`, `s3:PutObject`, `s3:ListBucket`)
-- Against each resource (`arn:aws:s3:::test-bucket/*`)
-- Compares result with expectation from `expect` map
-
-### When to Use Legacy Format
-
-✅ **Use when:**
-- Testing multiple actions against the same resource(s)
-- Quick validation during policy development
-- Simple scenarios without conditions
-
-❌ **Don't use when:**
-- Each test needs different resources
-- Tests need context conditions
-- You want descriptive test names
-- Tests need per-test policy overrides
-
-## Collection Format
-
-The collection format is ideal for **comprehensive test suites** with complex scenarios.
-
-### Structure
-
-```yaml
-policy_json: "path/to/policy.json"  # Or policy_template
-resource_policy_json: "..."         # Optional
-caller_arn: "..."                   # Optional
-resource_owner: "..."               # Optional
-scp_paths:                          # Optional
-  - "path/to/scp.json"
-
-tests:                               # Array of test cases
-  - name: "Descriptive test name"    # Optional
-    action: "s3:GetObject"           # Required
-    resource: "arn:aws:s3:::..."     # Required (or resources array)
-    expect: "allowed"                # Required
-    context:                         # Optional
-      - ContextKeyName: "aws:SourceIp"
-        ContextKeyType: "string"
-        ContextKeyValues: ["10.0.0.1"]
-```
-
-### Real Example
+### Basic Example
 
 From [`test/scenarios/08-collection-format-s3.yml`](https://github.com/reaandrew/politest/blob/main/test/scenarios/08-collection-format-s3.yml):
 
 ```yaml
-# Test: S3 policy using collection format
-# Demonstrates named test cases with individual expectations
-
 policy_json: "../policies/allow-s3.json"
 
 tests:
@@ -129,106 +84,119 @@ tests:
     resource: "arn:aws:s3:::test-bucket/*"
     expect: "allowed"
 
-  - name: "ListBucket on test-bucket should be allowed"
-    action: "s3:ListBucket"
-    resource: "arn:aws:s3:::test-bucket"
-    expect: "allowed"
-
   - name: "DeleteBucket should be denied (not in policy)"
     action: "s3:DeleteBucket"
     resource: "arn:aws:s3:::test-bucket"
     expect: "implicitDeny"
-
-  - name: "GetObject from different-bucket is also allowed (policy uses wildcard)"
-    action: "s3:GetObject"
-    resource: "arn:aws:s3:::different-bucket/*"
-    expect: "allowed"
 ```
 
-### Optional Test Names
+## Actions Array Expansion
 
-Test names are **optional**. If omitted, politest generates a name automatically:
+The `actions` field allows testing multiple actions with the same configuration. Each action expands into a separate test execution.
+
+### Example
 
 ```yaml
 tests:
-  # Named test
+  # This single test definition...
+  - name: "Test S3 read operations"
+    actions:
+      - "s3:GetObject"
+      - "s3:GetObjectVersion"
+      - "s3:ListBucket"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "allowed"
+
+  # ...expands to 3 separate tests:
+  # [1/3] Test S3 read operations
+  # [2/3] Test S3 read operations
+  # [3/3] Test S3 read operations
+```
+
+### Real-World Example
+
+From [`examples/athena-policy/scenario.yml`](https://github.com/reaandrew/politest/tree/main/examples/athena-policy):
+
+```yaml
+tests:
+  - name: "AthenaWorkgroupActionsAllow"
+    actions:
+      - "athena:BatchGetNamedQuery"
+      - "athena:BatchGetPreparedStatement"
+      - "athena:BatchGetQueryExecution"
+      - "athena:CreateNamedQuery"
+      - "athena:StartQueryExecution"
+      # ... 15 more actions
+    resources:
+      - "arn:aws:athena:{{.region}}:{{.account_id}}:workgroup/*"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+    expect: "allowed"
+```
+
+This expands to 20 individual tests, one per action, all using the same resources, context, and expectation.
+
+### When to Use Actions Array
+
+✅ **Use when:**
+
+- Testing multiple similar actions with same resource/context/expect
+
+- Validating a group of related permissions
+
+- Reducing repetition in test definitions
+
+❌ **Don't use when:**
+
+- Actions have different expected outcomes
+
+- Actions need different resources or context
+
+- You want different test names for each action
+
+## Optional Test Names
+
+Test names are **optional**. If omitted, politest generates a name from the action and resource:
+
+```yaml
+tests:
+  # Named test - uses provided name
   - name: "Custom descriptive name"
     action: "s3:GetObject"
     resource: "arn:aws:s3:::bucket/*"
     expect: "allowed"
 
-  # Unnamed test - displays as "s3:PutObject on arn:aws:s3:::bucket/*"
+  # Unnamed test - auto-generates "s3:PutObject on arn:aws:s3:::bucket/*"
   - action: "s3:PutObject"
     resource: "arn:aws:s3:::bucket/*"
     expect: "allowed"
 ```
 
-**Output for unnamed tests:**
+**Output:**
 
 ```
+[1/2] Custom descriptive name
+  ✓ PASS: allowed
+
 [2/2] s3:PutObject on arn:aws:s3:::bucket/*
   ✓ PASS: allowed
 ```
 
-### When to Use Collection Format
-
-✅ **Use when:**
-- Each test needs different resources
-- You want descriptive, readable test names
-- Tests require context conditions (IP, MFA, tags)
-- Tests need per-test policy overrides (different caller ARNs, resource policies)
-- Building comprehensive test suites
-
-❌ **Don't use when:**
-- Quick one-off testing
-- All tests use the same resource
-- Simplicity is more important than features
-
-## Advanced Collection Format Features
-
-### Per-Test Resource Policy Override
-
-From [`test/scenarios/13-test-level-overrides.yml`](https://github.com/reaandrew/politest/blob/main/test/scenarios/13-test-level-overrides.yml):
-
-```yaml
-# Default identity policy
-policy_json: "../policies/user-alice-identity.json"
-
-# Default caller
-caller_arn: "arn:aws:iam::111111111111:user/alice"
-
-tests:
-  - name: "Alice with default bucket policy"
-    action: "s3:GetObject"
-    resource: "arn:aws:s3:::shared-bucket/data.txt"
-    resource_policy_json: "../policies/s3-bucket-policy-cross-account.json"
-    expect: "allowed"
-
-  - name: "Bob trying same action (override caller)"
-    action: "s3:GetObject"
-    resource: "arn:aws:s3:::shared-bucket/data.txt"
-    caller_arn: "arn:aws:iam::111111111111:user/bob"  # Override
-    resource_policy_json: "../policies/s3-bucket-policy-cross-account.json"
-    expect: "allowed"
-```
-
-**Test-level overrides:**
-- `caller_arn` - Simulate as different IAM principal
-- `resource_policy_json` / `resource_policy_template` - Different resource policy
-- `resource_owner` - Different account owns the resource
-- `resource_handling_option` - EC2-specific scenarios
+## Advanced Features
 
 ### Per-Test Context Conditions
 
-From [`test/scenarios/10-context-conditions.yml`](https://github.com/reaandrew/politest/blob/main/test/scenarios/10-context-conditions.yml):
+Each test can have its own IAM condition context:
 
 ```yaml
-policy_json: "../policies/allow-s3-with-conditions.json"
+policy_json: "allow-s3-with-conditions.json"
 
 tests:
-  - name: "GetObject allowed from trusted IP range"
+  - name: "GetObject allowed from trusted IP"
     action: "s3:GetObject"
-    resource: "arn:aws:s3:::secure-bucket/data.txt"
+    resource: "arn:aws:s3:::secure-bucket/*"
     context:
       - ContextKeyName: "aws:SourceIp"
         ContextKeyType: "string"
@@ -237,7 +205,7 @@ tests:
 
   - name: "GetObject denied from untrusted IP"
     action: "s3:GetObject"
-    resource: "arn:aws:s3:::secure-bucket/data.txt"
+    resource: "arn:aws:s3:::secure-bucket/*"
     context:
       - ContextKeyName: "aws:SourceIp"
         ContextKeyType: "string"
@@ -245,155 +213,118 @@ tests:
     expect: "implicitDeny"
 ```
 
-## Choosing the Right Format
+### Per-Test Policy Overrides
 
-### Decision Tree
-
-```
-Do you need to test multiple actions on the same resource?
-  ├─ No → Use Collection Format
-  └─ Yes
-      │
-      Do you need context conditions or per-test overrides?
-        ├─ Yes → Use Collection Format
-        └─ No → Use Legacy Format
-```
-
-### Examples by Use Case
-
-#### Use Case: Quick Policy Validation
-
-**Best choice: Legacy Format**
+Override resource policies, caller ARNs, and other settings per test:
 
 ```yaml
-policy_json: "new-policy.json"
-actions:
-  - "s3:GetObject"
-  - "s3:PutObject"
-  - "s3:DeleteObject"
-resources:
-  - "arn:aws:s3:::my-bucket/*"
-expect:
-  "s3:GetObject": "allowed"
-  "s3:PutObject": "allowed"
-  "s3:DeleteObject": "implicitDeny"
-```
-
-#### Use Case: Cross-Account S3 Testing
-
-**Best choice: Collection Format**
-
-```yaml
-policy_json: "alice-identity.json"
-resource_policy_json: "bucket-policy.json"
-caller_arn: "arn:aws:iam::111111111111:user/alice"
-resource_owner: "arn:aws:iam::222222222222:root"
+policy_json: "user-alice-identity.json"
+caller_arn: "arn:aws:iam::111111111111:user/alice"  # Default
 
 tests:
-  - name: "Cross-account read"
+  - name: "Alice accesses shared bucket"
     action: "s3:GetObject"
-    resource: "arn:aws:s3:::shared-bucket/*"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    resource_policy_json: "bucket-policy.json"
     expect: "allowed"
 
-  - name: "Cross-account write denied"
-    action: "s3:PutObject"
-    resource: "arn:aws:s3:::shared-bucket/*"
-    expect: "explicitDeny"
+  - name: "Bob tries same action (override caller)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    caller_arn: "arn:aws:iam::111111111111:user/bob"  # Override for this test
+    resource_policy_json: "bucket-policy.json"
+    expect: "implicitDeny"
 ```
 
-#### Use Case: Conditional Access Testing
+**Available overrides per test:**
 
-**Best choice: Collection Format**
+- `caller_arn` - Simulate as different IAM principal
+
+- `resource_policy_json` / `resource_policy_template` - Different resource policy
+
+- `resource_owner` - Different account owns the resource
+
+- `resource_handling_option` - EC2-specific scenarios
+
+### Multiple Resources
+
+Test an action against multiple resources simultaneously:
 
 ```yaml
-policy_json: "mfa-required-policy.json"
-
 tests:
-  - name: "Delete with MFA"
-    action: "s3:DeleteObject"
-    resource: "arn:aws:s3:::bucket/*"
+  - name: "GetObject on multiple buckets"
+    action: "s3:GetObject"
+    resources:
+      - "arn:aws:s3:::bucket1/*"
+      - "arn:aws:s3:::bucket2/*"
+      - "arn:aws:s3:::bucket3/*"
+    expect: "allowed"
+```
+
+## Complete Example
+
+Comprehensive scenario using all features:
+
+```yaml
+# Template variables
+vars_file: "vars/production.yml"
+vars:
+  environment: "prod"
+
+# Identity policy (templated)
+policy_template: "policies/s3-policy.json.tpl"
+
+# Resource policy (templated)
+resource_policy_template: "policies/bucket-policy.json.tpl"
+
+# Cross-account simulation
+caller_arn: "arn:aws:iam::{{.source_account}}:user/alice"
+resource_owner: "arn:aws:iam::{{.target_account}}:root"
+
+# Organizational policies
+scp_paths:
+  - "scp/organization-*.json"
+
+# Global context (applied to all tests unless overridden)
+context:
+  - ContextKeyName: "aws:PrincipalTag/Department"
+    ContextKeyType: "string"
+    ContextKeyValues: ["{{.department}}"]
+
+# Test cases
+tests:
+  - name: "Alice reads from {{.environment}} bucket with MFA"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/data.txt"
     context:
       - ContextKeyName: "aws:MultiFactorAuthPresent"
         ContextKeyType: "boolean"
         ContextKeyValues: ["true"]
     expect: "allowed"
 
-  - name: "Delete without MFA"
-    action: "s3:DeleteObject"
-    resource: "arn:aws:s3:::bucket/*"
-    context:
-      - ContextKeyName: "aws:MultiFactorAuthPresent"
-        ContextKeyType: "boolean"
-        ContextKeyValues: ["false"]
-    expect: "implicitDeny"
-```
-
-## Mixing Formats
-
-**You cannot mix formats in a single file.** Choose one format per scenario file.
-
-❌ **This will not work:**
-
-```yaml
-# DON'T DO THIS
-policy_json: "policy.json"
-
-actions:  # Legacy format
-  - "s3:GetObject"
-
-tests:    # Collection format
-  - name: "test"
-    action: "s3:PutObject"
-```
-
-✓ **Instead, use separate files:**
-
-```
-scenarios/
-  ├── quick-test.yml          # Legacy format
-  └── comprehensive-test.yml  # Collection format
-```
-
-## Converting Between Formats
-
-### Legacy → Collection
-
-**Before (Legacy):**
-
-```yaml
-policy_json: "policy.json"
-actions:
-  - "s3:GetObject"
-  - "s3:PutObject"
-resources:
-  - "arn:aws:s3:::bucket/*"
-expect:
-  "s3:GetObject": "allowed"
-  "s3:PutObject": "implicitDeny"
-```
-
-**After (Collection):**
-
-```yaml
-policy_json: "policy.json"
-tests:
-  - name: "GetObject should be allowed"
-    action: "s3:GetObject"
-    resource: "arn:aws:s3:::bucket/*"
+  - name: "Test multiple read actions"
+    actions:
+      - "s3:GetObject"
+      - "s3:GetObjectVersion"
+      - "s3:GetObjectMetadata"
+    resource: "arn:aws:s3:::{{.bucket_name}}/*"
     expect: "allowed"
 
-  - name: "PutObject should be denied"
-    action: "s3:PutObject"
-    resource: "arn:aws:s3:::bucket/*"
+  - name: "Bob denied (override caller)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.bucket_name}}/data.txt"
+    caller_arn: "arn:aws:iam::{{.source_account}}:user/bob"
     expect: "implicitDeny"
 ```
 
 ## Next Steps
 
 - **[Learn Template Variables](Template-Variables)** - Make scenarios reusable
-- **[Understand Scenario Inheritance](Scenario-Inheritance)** - Extend base scenarios
-- **[Test Resource Policies](Resource-Policies-and-Cross-Account)** - Cross-account testing
+
+- **[API Reference](API-Reference)** - Complete field reference
+
+- **[See Examples](https://github.com/reaandrew/politest/tree/main/test/scenarios)** - 18 working scenarios
 
 ---
 
-**See all format examples:** [test/scenarios/](https://github.com/reaandrew/politest/tree/main/test/scenarios) directory →
+**Explore real scenarios:** [test/scenarios/](https://github.com/reaandrew/politest/tree/main/test/scenarios) directory →
