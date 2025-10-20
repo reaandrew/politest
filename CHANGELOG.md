@@ -1,3 +1,9 @@
+## [2.1.3](https://github.com/reaandrew/politest/compare/v2.1.2...v2.1.3) (2025-10-20)
+
+### Bug Fixes
+
+* use single ldflags environment variable for SLSA builders ([c1d8d6d](https://github.com/reaandrew/politest/commit/c1d8d6db6cb693baf445d8fe9d30e4cbfbcc682a))
+
 ## [2.1.2](https://github.com/reaandrew/politest/compare/v2.1.1...v2.1.2) (2025-10-20)
 
 ### Bug Fixes
