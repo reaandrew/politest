@@ -1,3 +1,9 @@
+## [2.1.11](https://github.com/reaandrew/politest/compare/v2.1.10...v2.1.11) (2025-10-20)
+
+### Bug Fixes
+
+* use PAT token for semantic-release to trigger SLSA workflow ([6fb6e7b](https://github.com/reaandrew/politest/commit/6fb6e7b3b5092c712f0512bcf381b296e5f3de9a))
+
 ## [2.1.10](https://github.com/reaandrew/politest/compare/v2.1.9...v2.1.10) (2025-10-20)
 
 ### Bug Fixes
