@@ -1,3 +1,9 @@
+## [2.1.5](https://github.com/reaandrew/politest/compare/v2.1.4...v2.1.5) (2025-10-20)
+
+### Bug Fixes
+
+* pass separate VERSION/COMMIT/BUILD_DATE to SLSA builder ([f588686](https://github.com/reaandrew/politest/commit/f5886862ded564d25402c66186e1cb5ae03e3cbf))
+
 ## [2.1.4](https://github.com/reaandrew/politest/compare/v2.1.3...v2.1.4) (2025-10-20)
 
 ### Bug Fixes
