@@ -1,3 +1,24 @@
+## [2.0.0](https://github.com/reaandrew/politest/compare/v1.2.0...v2.0.0) (2025-10-20)
+
+### ⚠ BREAKING CHANGES
+
+* Legacy format with scenario-level actions, resources, and expect map is no longer supported. All scenarios must use the tests array format. See migration examples in updated documentation.
+
+Changes:
+- Remove Actions, Resources, Expect fields from Scenario struct
+- Remove RunLegacyFormat function and related code (~116 lines)
+- Convert 7 test scenarios (01-07) to collection format
+- Update README.md, CLAUDE.md, and WIKI.md to remove legacy format references
+- Update all test files to remove legacy format test cases
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+### Features
+
+* remove legacy format support and standardize on collection format ([47b2f01](https://github.com/reaandrew/politest/commit/47b2f013a3bf273b27f5ae0f349529624eccee20))
+
 ## [1.2.0](https://github.com/reaandrew/politest/compare/v1.1.1...v1.2.0) (2025-10-20)
 
 ### Features
