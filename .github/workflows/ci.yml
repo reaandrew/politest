@@ -25,6 +25,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      with:
+        egress-policy: audit
+
     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
       with:
         fetch-depth: 0
@@ -83,6 +88,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint-and-test
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      with:
+        egress-policy: audit
+
     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
 
     - name: Setup Go
@@ -101,6 +111,11 @@ jobs:
     needs: lint-and-test
 
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      with:
+        egress-policy: audit
+
     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
       with:
         fetch-depth: 0
@@ -119,6 +134,11 @@ jobs:
     needs: [lint-and-test, dependency-scan, gitguardian-scan]
 
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      with:
+        egress-policy: audit
+
     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
       with:
         fetch-depth: 0
@@ -225,6 +245,11 @@ jobs:
       image: semgrep/semgrep:1.95.0
 
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      with:
+        egress-policy: audit
+
     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
     - name: Run Semgrep analysis
       run: |
@@ -244,6 +269,11 @@ jobs:
     if: always() && !cancelled() && !contains(needs.*.result, 'failure')
 
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      with:
+        egress-policy: audit
+
     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
 
     - name: Setup Go
@@ -282,6 +312,11 @@ jobs:
       contents: read
 
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      with:
+        egress-policy: audit
+
     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
 
     - name: Setup Go
@@ -323,6 +358,11 @@ jobs:
       contents: read
 
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      with:
+        egress-policy: audit
+
     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
 
     - name: Setup Go
@@ -355,9 +395,7 @@ jobs:
       run: |
         set -e
 
-        echo "======================================"
-        echo "Running example scenario tests"
-        echo "======================================"
+        echo "Running example scenario tests..."
         echo ""
 
         PASSED=0
@@ -366,30 +404,22 @@ jobs:
         # Find all scenario files in examples directory
         while IFS= read -r -d '' scenario; do
           scenario_name=$(basename "$(dirname "$scenario")")/$(basename "$scenario")
+          echo "Testing: $scenario_name"
 
-          echo "──────────────────────────────────────"
-          echo "TEST: $scenario_name"
-          echo "──────────────────────────────────────"
-
-          # Run the test and capture output
           if ./politest --scenario "$scenario" --no-warn > /tmp/example-output.log 2>&1; then
-            TEST_RESULT="✓ PASS"
+            echo "  ✓ PASS"
             PASSED=$((PASSED + 1))
           else
-            TEST_RESULT="✗ FAIL"
+            echo "  ✗ FAIL"
+            echo "  Output:"
+            sed 's/^/    /' /tmp/example-output.log
             FAILED=$((FAILED + 1))
           fi
-
-          # Always show the full output for visibility
-          echo "Output:"
-          cat /tmp/example-output.log
-          echo ""
-          echo "Result: $TEST_RESULT"
           echo ""
         done < <(find examples \( -name "scenario.yml" -o -name "*.yml" \) -print0 | grep -zv "/scp/" | grep -zv "/policies/" | sort -z)
 
         echo "======================================"
-        echo "Summary: $PASSED passed, $FAILED failed"
+        echo "Example Test Results: $PASSED passed, $FAILED failed"
         echo "======================================"
 
         if [ $FAILED -gt 0 ]; then
@@ -403,6 +433,11 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      with:
+        egress-policy: audit
+
     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
       with:
         fetch-depth: 0
