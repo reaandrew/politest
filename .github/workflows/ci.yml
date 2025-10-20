@@ -417,15 +417,16 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
-      build_date: ${{ steps.date.outputs.date }}
+      ldflags: ${{ steps.ldflags.outputs.value }}
     steps:
-      - name: Format build date
-        id: date
+      - name: Generate ldflags
+        id: ldflags
         run: |
-          # Convert to UTC with Z notation to avoid colons in timezone offset
-          BUILD_DATE=$(date -u -d "${{ github.event.head_commit.timestamp }}" +"%Y-%m-%dT%H:%M:%SZ")
-          echo "date=$BUILD_DATE" >> $GITHUB_OUTPUT
-          echo "Formatted build date: $BUILD_DATE"
+          # Build complete ldflags string with version information
+          BUILD_DATE=$(date -u -d "${{ github.event.head_commit.timestamp }}" +"%Y-%m-%dT%H:%M:%S%z")
+          LDFLAGS="-X 'main.version=${{ github.ref_name }}' -X 'main.gitCommit=${{ github.sha }}' -X 'main.buildDate=${BUILD_DATE}'"
+          echo "value=$LDFLAGS" >> $GITHUB_OUTPUT
+          echo "Generated ldflags: $LDFLAGS"
 
   slsa-build-linux-amd64:
     name: SLSA Build linux-amd64
@@ -440,7 +441,7 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/linux-amd64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      evaluated-envs: "GOFLAGS_LDFLAGS:${{ needs.prepare-build-metadata.outputs.ldflags }}"
       upload-assets: true
 
   slsa-build-linux-arm64:
@@ -456,7 +457,7 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/linux-arm64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      evaluated-envs: "GOFLAGS_LDFLAGS:${{ needs.prepare-build-metadata.outputs.ldflags }}"
       upload-assets: true
 
   slsa-build-darwin-amd64:
@@ -472,7 +473,7 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/darwin-amd64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      evaluated-envs: "GOFLAGS_LDFLAGS:${{ needs.prepare-build-metadata.outputs.ldflags }}"
       upload-assets: true
 
   slsa-build-darwin-arm64:
@@ -488,7 +489,7 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/darwin-arm64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      evaluated-envs: "GOFLAGS_LDFLAGS:${{ needs.prepare-build-metadata.outputs.ldflags }}"
       upload-assets: true
 
   slsa-build-windows-amd64:
@@ -504,7 +505,7 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/windows-amd64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      evaluated-envs: "GOFLAGS_LDFLAGS:${{ needs.prepare-build-metadata.outputs.ldflags }}"
       upload-assets: true
 
   slsa-build-windows-arm64:
@@ -520,5 +521,5 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/windows-arm64.yml
-      evaluated-envs: "VERSION:${{ github.ref_name }}, COMMIT:${{ github.sha }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
+      evaluated-envs: "GOFLAGS_LDFLAGS:${{ needs.prepare-build-metadata.outputs.ldflags }}"
       upload-assets: true
