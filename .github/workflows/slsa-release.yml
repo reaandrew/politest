@@ -1,9 +1,8 @@
 name: SLSA Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -21,15 +20,17 @@ jobs:
       build_date: ${{ steps.metadata.outputs.build_date }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Generate build metadata
         id: metadata
         run: |
-          # Extract version from tag (remove 'refs/tags/' prefix)
-          VERSION="${GITHUB_REF#refs/tags/}"
+          # Extract version from release tag
+          VERSION="${{ github.event.release.tag_name }}"
 
-          # Get commit SHA
-          COMMIT="${GITHUB_SHA}"
+          # Get commit SHA from release
+          COMMIT="${{ github.event.release.target_commitish }}"
 
           # Use ISO 8601 basic format without colons for SLSA compatibility
           BUILD_DATE=$(date -u +%Y%m%dT%H%M%SZ)
