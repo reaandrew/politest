@@ -284,10 +284,74 @@ jobs:
     - name: Run integration tests
       run: ./test/run-tests.sh
 
+  example-tests:
+    name: Example Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Build politest
+      run: go build -o politest .
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: us-east-1
+
+    - name: Verify AWS access
+      run: aws sts get-caller-identity
+
+    - name: Run example tests
+      run: |
+        set -e
+
+        echo "Running example scenario tests..."
+        echo ""
+
+        PASSED=0
+        FAILED=0
+
+        # Find all scenario files in examples directory
+        while IFS= read -r -d '' scenario; do
+          scenario_name=$(basename "$(dirname "$scenario")")/$(basename "$scenario")
+          echo "Testing: $scenario_name"
+
+          if ./politest --scenario "$scenario" --no-warn > /tmp/example-output.log 2>&1; then
+            echo "  ✓ PASS"
+            PASSED=$((PASSED + 1))
+          else
+            echo "  ✗ FAIL"
+            echo "  Output:"
+            sed 's/^/    /' /tmp/example-output.log
+            FAILED=$((FAILED + 1))
+          fi
+          echo ""
+        done < <(find examples -name "scenario.yml" -o -name "*.yml" | grep -v "/scp/" | grep -v "/policies/" | sort -z)
+
+        echo "======================================"
+        echo "Example Test Results: $PASSED passed, $FAILED failed"
+        echo "======================================"
+
+        if [ $FAILED -gt 0 ]; then
+          exit 1
+        fi
+
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [lint-and-test, gitguardian-scan, sonarcloud, semgrep, build, integration-tests]
+    needs: [lint-and-test, gitguardian-scan, sonarcloud, semgrep, build, integration-tests, example-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
