@@ -5,11 +5,32 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 )
+
+var (
+	// Pattern for ${VAR_NAME} style variables (shell/environment variable style with braces)
+	dollarBraceVarPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+	// Pattern for $VAR_NAME style variables (environment variable style without braces)
+	dollarVarPattern = regexp.MustCompile(`\$([A-Za-z_][A-Za-z0-9_]*)`)
+	// Pattern for <VAR_NAME> style variables (custom variable style)
+	angleVarPattern = regexp.MustCompile(`<([A-Za-z_][A-Za-z0-9_]*)>`)
+)
+
+// PreprocessTemplate converts ${VAR}, $VAR and <VAR> patterns to {{.VAR}} for Go template compatibility
+func PreprocessTemplate(s string) string {
+	// Replace <VAR> with {{.VAR}}
+	s = angleVarPattern.ReplaceAllString(s, "{{.$1}}")
+	// Replace ${VAR} with {{.VAR}} (process before $VAR to avoid conflicts)
+	s = dollarBraceVarPattern.ReplaceAllString(s, "{{.$1}}")
+	// Replace $VAR with {{.VAR}}
+	s = dollarVarPattern.ReplaceAllString(s, "{{.$1}}")
+	return s
+}
 
 // RenderStringSlice renders a slice of strings using template variables
 func RenderStringSlice(in []string, vars map[string]any) []string {
@@ -24,7 +45,9 @@ func RenderStringSlice(in []string, vars map[string]any) []string {
 func RenderTemplateFileJSON(path string, vars map[string]any) string {
 	tplText, err := os.ReadFile(path)
 	Check(err)
-	tpl := template.Must(template.New(filepath.Base(path)).Option("missingkey=error").Parse(string(tplText)))
+	// Preprocess to convert $VAR and <VAR> to {{.VAR}}
+	preprocessed := PreprocessTemplate(string(tplText))
+	tpl := template.Must(template.New(filepath.Base(path)).Option("missingkey=error").Parse(preprocessed))
 	var buf bytes.Buffer
 	Check(tpl.Execute(&buf, vars))
 	// Validate and minify JSON
@@ -33,7 +56,9 @@ func RenderTemplateFileJSON(path string, vars map[string]any) string {
 
 // RenderTemplateString renders a template string with the given variables
 func RenderTemplateString(s string, vars map[string]any) string {
-	tpl := template.Must(template.New("inline").Option("missingkey=error").Parse(s))
+	// Preprocess to convert $VAR and <VAR> to {{.VAR}}
+	preprocessed := PreprocessTemplate(s)
+	tpl := template.Must(template.New("inline").Option("missingkey=error").Parse(preprocessed))
 	var buf bytes.Buffer
 	Check(tpl.Execute(&buf, vars))
 	return buf.String()

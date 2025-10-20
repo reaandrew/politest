@@ -168,7 +168,7 @@ func RunTestCollection(client IAMSimulator, scen *Scenario, cfg SimulatorConfig)
 	fmt.Printf("Running %d test(s)...\n\n", len(expandedTests))
 
 	for i, test := range expandedTests {
-		pass, resp := runSingleTest(client, scen, cfg, test, i)
+		pass, resp := runSingleTest(client, scen, cfg, test, i, len(expandedTests))
 		allResponses = append(allResponses, resp)
 		if pass {
 			passCount++
@@ -216,12 +216,12 @@ func expandTestsWithActions(tests []TestCase) []TestCase {
 }
 
 // runSingleTest executes a single test case and returns pass/fail status and response
-func runSingleTest(client IAMSimulator, scen *Scenario, cfg SimulatorConfig, test TestCase, index int) (bool, *iam.SimulateCustomPolicyOutput) {
+func runSingleTest(client IAMSimulator, scen *Scenario, cfg SimulatorConfig, test TestCase, index int, totalTests int) (bool, *iam.SimulateCustomPolicyOutput) {
 	resources := prepareTestResources(test, cfg.Variables)
 	action := RenderString(test.Action, cfg.Variables)
 	testName := getTestName(test, action, resources)
 
-	fmt.Printf("[%d/%d] %s\n", index+1, len(scen.Tests), testName)
+	fmt.Printf("[%d/%d] %s\n", index+1, totalTests, testName)
 
 	// Build test input
 	ctxEntries, err := mergeContextEntries(scen.Context, test.Context, cfg.Variables)

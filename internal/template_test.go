@@ -343,3 +343,214 @@ func TestParseContextTypeDefault(t *testing.T) {
 		t.Error("ParseContextType() with unknown type should return an error, got nil")
 	}
 }
+
+func TestPreprocessTemplate(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "dollar variable",
+			input: "$ACCOUNT_ID",
+			want:  "{{.ACCOUNT_ID}}",
+		},
+		{
+			name:  "angle bracket variable",
+			input: "<ACCOUNT_NO>",
+			want:  "{{.ACCOUNT_NO}}",
+		},
+		{
+			name:  "mixed variables",
+			input: "arn:aws:s3:::$BUCKET_NAME/<PREFIX>/*",
+			want:  "arn:aws:s3:::{{.BUCKET_NAME}}/{{.PREFIX}}/*",
+		},
+		{
+			name:  "no variables",
+			input: "static string",
+			want:  "static string",
+		},
+		{
+			name:  "existing Go template",
+			input: "{{.existing}}",
+			want:  "{{.existing}}",
+		},
+		{
+			name:  "all three formats",
+			input: "$ENV_VAR and <CUSTOM_VAR> and {{.go_var}}",
+			want:  "{{.ENV_VAR}} and {{.CUSTOM_VAR}} and {{.go_var}}",
+		},
+		{
+			name:  "lowercase variable names",
+			input: "$account_id and <bucket_name>",
+			want:  "{{.account_id}} and {{.bucket_name}}",
+		},
+		{
+			name:  "mixed case variable names",
+			input: "$MyVar and <AnotherVar>",
+			want:  "{{.MyVar}} and {{.AnotherVar}}",
+		},
+		{
+			name:  "variable with underscores",
+			input: "$AWS_ACCOUNT_ID and <DNS_HUB_DEV>",
+			want:  "{{.AWS_ACCOUNT_ID}} and {{.DNS_HUB_DEV}}",
+		},
+		{
+			name:  "variable with numbers",
+			input: "$VAR123 and <ACCOUNT_NO_2>",
+			want:  "{{.VAR123}} and {{.ACCOUNT_NO_2}}",
+		},
+		{
+			name:  "dollar sign not followed by valid var",
+			input: "$123 $-invalid",
+			want:  "$123 $-invalid",
+		},
+		{
+			name:  "angle brackets not valid var",
+			input: "<123> <-invalid>",
+			want:  "<123> <-invalid>",
+		},
+		{
+			name:  "dollar brace variable",
+			input: "${ACCOUNT_ID}",
+			want:  "{{.ACCOUNT_ID}}",
+		},
+		{
+			name:  "multiple dollar brace variables",
+			input: "${BUCKET}-${REGION}-${ACCOUNT}",
+			want:  "{{.BUCKET}}-{{.REGION}}-{{.ACCOUNT}}",
+		},
+		{
+			name:  "dollar brace in ARN",
+			input: "arn:aws:s3:::${BUCKET_NAME}/*",
+			want:  "arn:aws:s3:::{{.BUCKET_NAME}}/*",
+		},
+		{
+			name:  "mixed dollar formats",
+			input: "$SIMPLE and ${BRACED}",
+			want:  "{{.SIMPLE}} and {{.BRACED}}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := PreprocessTemplate(tt.input)
+			if got != tt.want {
+				t.Errorf("PreprocessTemplate() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderStringWithDollarVars(t *testing.T) {
+	vars := map[string]any{
+		"ACCOUNT_ID": "123456789012",
+		"REGION":     "us-east-1",
+		"BUCKET":     "my-bucket",
+	}
+
+	tests := []struct {
+		name     string
+		template string
+		want     string
+	}{
+		{
+			name:     "dollar variable",
+			template: "$ACCOUNT_ID",
+			want:     "123456789012",
+		},
+		{
+			name:     "dollar variable in ARN",
+			template: "arn:aws:s3:::$BUCKET/*",
+			want:     "arn:aws:s3:::my-bucket/*",
+		},
+		{
+			name:     "multiple dollar variables",
+			template: "$BUCKET-$REGION-$ACCOUNT_ID",
+			want:     "my-bucket-us-east-1-123456789012",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := RenderString(tt.template, vars)
+			if got != tt.want {
+				t.Errorf("RenderString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderStringWithAngleVars(t *testing.T) {
+	vars := map[string]any{
+		"ACCOUNT_NO": "123456789012",
+		"REGION":     "us-east-1",
+		"PREFIX":     "data",
+	}
+
+	tests := []struct {
+		name     string
+		template string
+		want     string
+	}{
+		{
+			name:     "angle variable",
+			template: "<ACCOUNT_NO>",
+			want:     "123456789012",
+		},
+		{
+			name:     "angle variable in ARN",
+			template: "arn:aws:iam::<ACCOUNT_NO>:role/MyRole",
+			want:     "arn:aws:iam::123456789012:role/MyRole",
+		},
+		{
+			name:     "multiple angle variables",
+			template: "<PREFIX>-<REGION>-<ACCOUNT_NO>",
+			want:     "data-us-east-1-123456789012",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := RenderString(tt.template, vars)
+			if got != tt.want {
+				t.Errorf("RenderString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderStringWithMixedVars(t *testing.T) {
+	vars := map[string]any{
+		"ACCOUNT_ID":  "123456789012",
+		"BUCKET_NAME": "my-bucket",
+		"region":      "us-east-1",
+		"custom_var":  "value",
+	}
+
+	tests := []struct {
+		name     string
+		template string
+		want     string
+	}{
+		{
+			name:     "all three formats",
+			template: "$ACCOUNT_ID-<BUCKET_NAME>-{{.region}}",
+			want:     "123456789012-my-bucket-us-east-1",
+		},
+		{
+			name:     "complex ARN with all formats",
+			template: "arn:aws:s3:::<BUCKET_NAME>-$ACCOUNT_ID/{{.custom_var}}/*",
+			want:     "arn:aws:s3:::my-bucket-123456789012/value/*",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := RenderString(tt.template, vars)
+			if got != tt.want {
+				t.Errorf("RenderString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

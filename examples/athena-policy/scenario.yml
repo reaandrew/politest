@@ -1,57 +1,93 @@
 # ACME EC2 Instance Profile Athena Policy Tests
-# Converted from legacy bash/JSON test framework to politest
-# This scenario demonstrates comprehensive IAM policy testing with context conditions
-# Uses the new 'actions' array feature to reduce duplication
+# Transposed from legacy bash/JSON test framework to politest
 
-vars_file: "vars.yml"
-policy_template: "policies/ACME_EC2InstanceProfile_AthenaPolicy.json.tpl"
+policy_template: "policies/ACME_EC2InstanceProfile_AthenaPolicy.json"
 
 # Include organizational SCPs
 scp_paths:
   - "scp/*.json"
 
-# Test collection format - using actions array to reduce duplication
-tests:
-  # ========================================
-  # ALLOW Cases - These should succeed
-  # ========================================
+# Variables for policy and tests
+vars:
+  # Account IDs (lowercase for tests)
+  dummy_account_id: "123456789123"
+  dns_hub_dev_account_id: "123456789123"
+  dns_hub_live_account_id: "123456789124"
+  account_id_3: "123456789125"
 
-  - name: "AthenaActionsAllow - List operations"
-    actions:  # Using actions array - expands to 3 tests
+  # Account IDs (uppercase for policy)
+  ACCOUNT_NO: "123456789123"
+  DNS_HUB_DEV_ACCOUNT_ID: "123456789123"
+  DNS_HUB_LIVE_ACCOUNT_ID: "123456789124"
+
+  # AWS Organization paths (lowercase for tests)
+  data_plane_nonprod_org_path: "o-123abc1234/r-reei"
+  data_plane_prod_org_path: "o-123abc1234/r-abcd"
+
+  # AWS Organization paths (uppercase for policy)
+  DATA_PLANE_NONPROD_ORG_PATH: "o-123abc1234/r-reei"
+  DATA_PLANE_PROD_ORG_PATH: "o-123abc1234/r-abcd"
+
+  # Region
+  region: "eu-west-2"
+
+# Test collection format
+tests:
+  # Test 1: AthenaActionsAllow
+  - name: "AthenaActionsAllow"
+    actions:
       - "athena:ListEngineVersions"
       - "athena:ListTagsForResource"
       - "athena:ListWorkGroups"
-    resource: "arn:aws:athena:{{.region}}:{{.dummy_account_id}}:*"
+    resource: "*"
     expect: "allowed"
 
-  - name: "AthenaWorkgroupActionsAllow - Query operations"
-    actions:  # Multiple actions with same context
+  # Test 2: AthenaWorkgroupActionsAllow
+  - name: "AthenaWorkgroupActionsAllow"
+    actions:
       - "athena:BatchGetNamedQuery"
-      - "athena:StartQueryExecution"
+      - "athena:BatchGetPreparedStatement"
+      - "athena:BatchGetQueryExecution"
+      - "athena:CreateNamedQuery"
+      - "athena:CreatePreparedStatement"
+      - "athena:DeleteNamedQuery"
+      - "athena:DeletePreparedStatement"
+      - "athena:GetNamedQuery"
+      - "athena:GetPreparedStatement"
       - "athena:GetQueryExecution"
-    resources:  # Test across multiple accounts
-      - "arn:aws:athena:{{.region}}:{{.dns_hub_dev_account_id}}:workgroup/test-workgroup"
-      - "arn:aws:athena:{{.region}}:{{.dns_hub_live_account_id}}:workgroup/analytics"
-      - "arn:aws:athena:{{.region}}:{{.dummy_account_id}}:workgroup/reporting"
+      - "athena:GetQueryResults"
+      - "athena:GetQueryResultsStream"
+      - "athena:GetQueryRuntimeStatistics"
+      - "athena:GetWorkGroup"
+      - "athena:ListNamedQueries"
+      - "athena:ListPreparedStatements"
+      - "athena:ListQueryExecutions"
+      - "athena:StartQueryExecution"
+      - "athena:StopQueryExecution"
+      - "athena:UpdateNamedQuery"
+      - "athena:UpdatePreparedStatement"
+    resources:
+      - "arn:aws:athena:{{.region}}:{{.dns_hub_dev_account_id}}:workgroup/*"
+      - "arn:aws:athena:{{.region}}:{{.dns_hub_live_account_id}}:workgroup/*"
+      - "arn:aws:athena:{{.region}}:{{.account_id_3}}:workgroup/*"
     context:
       - ContextKeyName: "aws:CalledVia"
         ContextKeyValues: ["athena.amazonaws.com"]
         ContextKeyType: "stringList"
       - ContextKeyName: "aws:ResourceOrgPaths"
-        ContextKeyValues: ["{{.data_plane_nonprod_org_path}}/account1"]
+        ContextKeyValues: ["{{.data_plane_nonprod_org_path}}/*"]
         ContextKeyType: "string"
       - ContextKeyName: "aws:VpceAccount"
         ContextKeyValues: ["{{.dns_hub_dev_account_id}}"]
         ContextKeyType: "string"
     expect: "allowed"
 
-  - name: "S3BucketActionsAllow - Bucket metadata"
+  # Test 3: S3BucketActionsAllow
+  - name: "S3BucketActionsAllow"
     actions:
       - "s3:GetBucketLocation"
       - "s3:ListBucket"
-    resources:
-      - "arn:aws:s3:::test-bucket"
-      - "arn:aws:s3:::data-lake"
+    resource: "arn:aws:s3:::*"
     context:
       - ContextKeyName: "aws:CalledVia"
         ContextKeyValues: ["athena.amazonaws.com"]
@@ -61,15 +97,14 @@ tests:
         ContextKeyType: "string"
     expect: "allowed"
 
-  - name: "S3ObjectActionsAllow - Object operations with encryption"
+  # Test 4: S3ObjectActionsAllow
+  - name: "S3ObjectActionsAllow"
     actions:
-      - "s3:GetObject"
-      - "s3:PutObject"
       - "s3:AbortMultipartUpload"
-    resources:
-      - "arn:aws:s3:::query-results/file.parquet"
-      - "arn:aws:s3:::results-bucket/output.csv"
-      - "arn:aws:s3:::upload-bucket/large-file.gz"
+      - "s3:GetObject"
+      - "s3:ListMultipartUploadParts"
+      - "s3:PutObject"
+    resource: "arn:aws:s3:::*/*"
     context:
       - ContextKeyName: "aws:CalledVia"
         ContextKeyValues: ["athena.amazonaws.com"]
@@ -78,77 +113,237 @@ tests:
         ContextKeyValues: ["{{.dummy_account_id}}"]
         ContextKeyType: "string"
       - ContextKeyName: "s3:x-amz-server-side-encryption-aws-kms-key-id"
-        ContextKeyValues: ["arn:aws:kms:{{.region}}:{{.dummy_account_id}}:key/12345678-1234-1234-1234-123456789012"]
+        ContextKeyValues: ["arn:aws:kms:{{.region}}:{{.dummy_account_id}}:key/*"]
         ContextKeyType: "string"
     expect: "allowed"
 
-  # ========================================
-  # DENY Cases - Explicit denies
-  # ========================================
-
-  - name: "AthenaWorkgroupActionsDeny - Primary workgroup blocked"
+  # Test 5: AthenaWorkgroupActionsDeny
+  - name: "AthenaWorkgroupActionsDeny"
     actions:
       - "athena:BatchGetNamedQuery"
+      - "athena:BatchGetPreparedStatement"
+      - "athena:BatchGetQueryExecution"
+      - "athena:CancelQueryExecution"
+      - "athena:CreateNamedQuery"
+      - "athena:CreateNotebook"
+      - "athena:CreatePreparedStatement"
+      - "athena:CreatePresignedNotebookUrl"
       - "athena:CreateWorkGroup"
+      - "athena:DeleteNamedQuery"
+      - "athena:DeleteNotebook"
+      - "athena:DeletePreparedStatement"
+      - "athena:DeleteWorkGroup"
+      - "athena:ExportNotebook"
+      - "athena:GetCalculationExecution"
+      - "athena:GetCalculationExecutionCode"
+      - "athena:GetCalculationExecutionStatus"
+      - "athena:GetNamedQuery"
+      - "athena:GetNotebookMetadata"
+      - "athena:GetPreparedStatement"
+      - "athena:GetQueryExecution"
+      - "athena:GetQueryResults"
+      - "athena:GetQueryResultsStream"
+      - "athena:GetQueryRuntimeStatistics"
+      - "athena:GetSession"
+      - "athena:GetSessionStatus"
+      - "athena:GetWorkGroup"
+      - "athena:ImportNotebook"
+      - "athena:ListCalculationExecutions"
+      - "athena:ListNamedQueries"
+      - "athena:ListNotebookMetadata"
+      - "athena:ListNotebookSessions"
+      - "athena:ListPreparedStatements"
+      - "athena:ListQueryExecutions"
+      - "athena:ListSessions"
+      - "athena:ListTagsForResource"
+      - "athena:PutCapacityAssignmentConfiguration"
+      - "athena:StartCalculationExecution"
       - "athena:StartQueryExecution"
+      - "athena:StartSession"
+      - "athena:StopCalculationExecution"
+      - "athena:StopQueryExecution"
+      - "athena:TagResource"
+      - "athena:TerminateSession"
+      - "athena:UntagResource"
+      - "athena:UpdateNamedQuery"
+      - "athena:UpdateNotebook"
+      - "athena:UpdateNotebookMetadata"
+      - "athena:UpdatePreparedStatement"
+      - "athena:UpdateWorkGroup"
     resource: "arn:aws:athena:*:*:workgroup/primary"
     context:
       - ContextKeyName: "aws:CalledVia"
         ContextKeyValues: ["athena.amazonaws.com"]
         ContextKeyType: "stringList"
       - ContextKeyName: "aws:ResourceOrgPaths"
-        ContextKeyValues: ["{{.data_plane_nonprod_org_path}}/account"]
+        ContextKeyValues: ["{{.data_plane_nonprod_org_path}}/*"]
         ContextKeyType: "string"
       - ContextKeyName: "aws:VpceAccount"
         ContextKeyValues: ["{{.dns_hub_dev_account_id}}"]
         ContextKeyType: "string"
     expect: "explicitDeny"
 
-  - name: "AthenaWorkgroupNonProdQueryActionsDeny - Live VPCE on nonprod"
+  # Test 6: AthenaWorkgroupNonProdQueryActionsDeny
+  - name: "AthenaWorkgroupNonProdQueryActionsDeny"
     actions:
-      - "athena:StartQueryExecution"
+      - "athena:BatchGetNamedQuery"
+      - "athena:BatchGetPreparedStatement"
+      - "athena:BatchGetQueryExecution"
+      - "athena:CancelQueryExecution"
+      - "athena:CreateNamedQuery"
+      - "athena:CreateNotebook"
+      - "athena:CreatePreparedStatement"
+      - "athena:CreatePresignedNotebookUrl"
+      - "athena:CreateWorkGroup"
+      - "athena:DeleteNamedQuery"
+      - "athena:DeleteNotebook"
+      - "athena:DeletePreparedStatement"
+      - "athena:DeleteWorkGroup"
+      - "athena:ExportNotebook"
+      - "athena:GetCalculationExecution"
+      - "athena:GetCalculationExecutionCode"
+      - "athena:GetCalculationExecutionStatus"
+      - "athena:GetNamedQuery"
+      - "athena:GetNotebookMetadata"
+      - "athena:GetPreparedStatement"
       - "athena:GetQueryExecution"
+      - "athena:GetQueryResults"
+      - "athena:GetQueryResultsStream"
+      - "athena:GetQueryRuntimeStatistics"
+      - "athena:GetSession"
+      - "athena:GetSessionStatus"
+      - "athena:GetWorkGroup"
+      - "athena:ImportNotebook"
+      - "athena:ListCalculationExecutions"
+      - "athena:ListNamedQueries"
+      - "athena:ListNotebookMetadata"
+      - "athena:ListNotebookSessions"
+      - "athena:ListPreparedStatements"
+      - "athena:ListQueryExecutions"
+      - "athena:ListSessions"
+      - "athena:ListTagsForResource"
+      - "athena:PutCapacityAssignmentConfiguration"
+      - "athena:StartCalculationExecution"
+      - "athena:StartQueryExecution"
+      - "athena:StartSession"
+      - "athena:StopCalculationExecution"
       - "athena:StopQueryExecution"
-    resource: "arn:aws:athena:{{.region}}:{{.dummy_account_id}}:workgroup/test-wg"
+      - "athena:TagResource"
+      - "athena:TerminateSession"
+      - "athena:UntagResource"
+      - "athena:UpdateNamedQuery"
+      - "athena:UpdateNotebook"
+      - "athena:UpdateNotebookMetadata"
+      - "athena:UpdatePreparedStatement"
+      - "athena:UpdateWorkGroup"
+    resource: "arn:aws:athena:*:*:workgroup/*"
     context:
       - ContextKeyName: "aws:CalledVia"
         ContextKeyValues: ["athena.amazonaws.com"]
         ContextKeyType: "stringList"
       - ContextKeyName: "aws:ResourceOrgPaths"
-        ContextKeyValues: ["{{.data_plane_nonprod_org_path}}/account"]
+        ContextKeyValues: ["{{.data_plane_nonprod_org_path}}/*"]
         ContextKeyType: "string"
       - ContextKeyName: "aws:VpceAccount"
         ContextKeyValues: ["{{.dns_hub_live_account_id}}"]
         ContextKeyType: "string"
     expect: "explicitDeny"
 
-  - name: "AthenaWorkgroupProdQueryActionsDeny - Dev VPCE on prod org path"
+  # Test 7: AthenaWorkgroupProdQueryActionsDeny
+  - name: "AthenaWorkgroupProdQueryActionsDeny"
     actions:
-      - "athena:GetQueryExecution"
+      - "athena:BatchGetNamedQuery"
+      - "athena:BatchGetPreparedStatement"
       - "athena:BatchGetQueryExecution"
-    resource: "arn:aws:athena:{{.region}}:{{.dummy_account_id}}:workgroup/prod-wg"
+      - "athena:CancelQueryExecution"
+      - "athena:CreateNamedQuery"
+      - "athena:CreateNotebook"
+      - "athena:CreatePreparedStatement"
+      - "athena:CreatePresignedNotebookUrl"
+      - "athena:CreateWorkGroup"
+      - "athena:DeleteNamedQuery"
+      - "athena:DeleteNotebook"
+      - "athena:DeletePreparedStatement"
+      - "athena:DeleteWorkGroup"
+      - "athena:ExportNotebook"
+      - "athena:GetCalculationExecution"
+      - "athena:GetCalculationExecutionCode"
+      - "athena:GetCalculationExecutionStatus"
+      - "athena:GetNamedQuery"
+      - "athena:GetNotebookMetadata"
+      - "athena:GetPreparedStatement"
+      - "athena:GetQueryExecution"
+      - "athena:GetQueryResults"
+      - "athena:GetQueryResultsStream"
+      - "athena:GetQueryRuntimeStatistics"
+      - "athena:GetSession"
+      - "athena:GetSessionStatus"
+      - "athena:GetWorkGroup"
+      - "athena:ImportNotebook"
+      - "athena:ListCalculationExecutions"
+      - "athena:ListNamedQueries"
+      - "athena:ListNotebookMetadata"
+      - "athena:ListNotebookSessions"
+      - "athena:ListPreparedStatements"
+      - "athena:ListQueryExecutions"
+      - "athena:ListSessions"
+      - "athena:ListTagsForResource"
+      - "athena:PutCapacityAssignmentConfiguration"
+      - "athena:StartCalculationExecution"
+      - "athena:StartQueryExecution"
+      - "athena:StartSession"
+      - "athena:StopCalculationExecution"
+      - "athena:StopQueryExecution"
+      - "athena:TagResource"
+      - "athena:TerminateSession"
+      - "athena:UntagResource"
+      - "athena:UpdateNamedQuery"
+      - "athena:UpdateNotebook"
+      - "athena:UpdateNotebookMetadata"
+      - "athena:UpdatePreparedStatement"
+      - "athena:UpdateWorkGroup"
+    resource: "arn:aws:athena:*:*:workgroup/*"
     context:
       - ContextKeyName: "aws:CalledVia"
         ContextKeyValues: ["athena.amazonaws.com"]
         ContextKeyType: "stringList"
       - ContextKeyName: "aws:ResourceOrgPaths"
-        ContextKeyValues: ["{{.data_plane_prod_org_path}}/prod-account"]
+        ContextKeyValues: ["{{.data_plane_prod_org_path}}/*"]
         ContextKeyType: "string"
       - ContextKeyName: "aws:VpceAccount"
         ContextKeyValues: ["{{.dns_hub_dev_account_id}}"]
         ContextKeyType: "string"
     expect: "explicitDeny"
 
-  - name: "S3BucketAccountBucketActionsDeny - Bucket management blocked"
+  # Test 8: S3BucketAccountBucketActionsDeny
+  - name: "S3BucketAccountBucketActionsDeny"
     actions:
       - "s3:CreateBucket"
+      - "s3:CreateBucketMetadataTableConfiguration"
       - "s3:DeleteBucket"
+      - "s3:DeleteBucketMetadataTableConfiguration"
+      - "s3:DeleteBucketPolicy"
+      - "s3:DeleteBucketWebsite"
+      - "s3:PutAccelerateConfiguration"
+      - "s3:PutAnalyticsConfiguration"
+      - "s3:PutBucketAcl"
+      - "s3:PutBucketCORS"
+      - "s3:PutBucketLogging"
+      - "s3:PutBucketNotification"
+      - "s3:PutBucketObjectLockConfiguration"
+      - "s3:PutBucketOwnershipControls"
       - "s3:PutBucketPolicy"
+      - "s3:PutBucketPublicAccessBlock"
+      - "s3:PutBucketRequestPayment"
+      - "s3:PutBucketTagging"
       - "s3:PutBucketVersioning"
-    resources:
-      - "arn:aws:s3:::{{.dummy_account_id}}-new-bucket"
-      - "arn:aws:s3:::{{.dummy_account_id}}-existing-bucket"
-      - "arn:aws:s3:::{{.dummy_account_id}}-data-lake"
+      - "s3:PutBucketWebsite"
+      - "s3:PutEncryptionConfiguration"
+      - "s3:PutIntelligentTieringConfiguration"
+      - "s3:PutInventoryConfiguration"
+      - "s3:PutLifecycleConfiguration"
+      - "s3:PutMetricsConfiguration"
+    resource: "arn:aws:s3:::{{.dummy_account_id}}-*"
     context:
       - ContextKeyName: "aws:CalledVia"
         ContextKeyValues: ["athena.amazonaws.com"]
@@ -158,9 +353,35 @@ tests:
         ContextKeyType: "string"
     expect: "explicitDeny"
 
-  - name: "S3ObjectAccountObjectActionsDeny - Delete on account buckets"
-    action: "s3:DeleteObject"
-    resource: "arn:aws:s3:::{{.dummy_account_id}}-bucket/file.txt"
+  # Test 9: S3ObjectAccountObjectActionsDeny
+  - name: "S3ObjectAccountObjectActionsDeny"
+    actions:
+      - "s3:DeleteObject"
+      - "s3:DeleteObjectTagging"
+      - "s3:DeleteObjectVersion"
+      - "s3:DeleteObjectVersionTagging"
+      - "s3:GetObject"
+      - "s3:GetObjectAcl"
+      - "s3:GetObjectAttributes"
+      - "s3:GetObjectLegalHold"
+      - "s3:GetObjectRetention"
+      - "s3:GetObjectTagging"
+      - "s3:GetObjectTorrent"
+      - "s3:GetObjectVersion"
+      - "s3:GetObjectVersionAcl"
+      - "s3:GetObjectVersionAttributes"
+      - "s3:GetObjectVersionForReplication"
+      - "s3:GetObjectVersionTagging"
+      - "s3:GetObjectVersionTorrent"
+      - "s3:PutObject"
+      - "s3:PutObjectAcl"
+      - "s3:PutObjectLegalHold"
+      - "s3:PutObjectRetention"
+      - "s3:PutObjectTagging"
+      - "s3:PutObjectVersionAcl"
+      - "s3:PutObjectVersionTagging"
+      - "s3:RestoreObject"
+    resource: "arn:aws:s3:::{{.dummy_account_id}}-*/*"
     context:
       - ContextKeyName: "aws:CalledVia"
         ContextKeyValues: ["athena.amazonaws.com"]
@@ -173,13 +394,12 @@ tests:
         ContextKeyType: "string"
     expect: "explicitDeny"
 
-  - name: "S3ObjectAclActionsDeny - ACL modifications blocked"
+  # Test 10: S3ObjectAclActionsDeny
+  - name: "S3ObjectAclActionsDeny"
     actions:
       - "s3:PutObjectAcl"
       - "s3:PutObjectVersionAcl"
-    resources:
-      - "arn:aws:s3:::any-bucket/object.json"
-      - "arn:aws:s3:::versioned-bucket/doc.pdf"
+    resource: "arn:aws:s3:::*/*"
     context:
       - ContextKeyName: "aws:CalledVia"
         ContextKeyValues: ["athena.amazonaws.com"]
@@ -189,14 +409,38 @@ tests:
         ContextKeyType: "string"
     expect: "explicitDeny"
 
-  - name: "S3ObjectCalledViaActionsDeny - Invalid CalledVia"
+  # Test 11: S3ObjectCalledViaActionsDeny_InvalidCalledVia
+  - name: "S3ObjectCalledViaActionsDeny_InvalidCalledVia"
     actions:
+      - "s3:AbortMultipartUpload"
+      - "s3:BypassGovernanceRetention"
+      - "s3:DeleteObject"
+      - "s3:DeleteObjectTagging"
+      - "s3:DeleteObjectVersion"
+      - "s3:DeleteObjectVersionTagging"
       - "s3:GetObject"
+      - "s3:GetObjectAcl"
+      - "s3:GetObjectAttributes"
+      - "s3:GetObjectLegalHold"
+      - "s3:GetObjectRetention"
+      - "s3:GetObjectTagging"
+      - "s3:GetObjectVersion"
+      - "s3:GetObjectVersionAcl"
+      - "s3:GetObjectVersionAttributes"
+      - "s3:GetObjectVersionTagging"
+      - "s3:ListMultipartUploadParts"
       - "s3:PutObject"
-    resource: "arn:aws:s3:::data/file.csv"
+      - "s3:PutObjectAcl"
+      - "s3:PutObjectLegalHold"
+      - "s3:PutObjectRetention"
+      - "s3:PutObjectTagging"
+      - "s3:PutObjectVersionAcl"
+      - "s3:PutObjectVersionTagging"
+      - "s3:RestoreObject"
+    resource: "arn:aws:s3:::*/*"
     context:
       - ContextKeyName: "aws:CalledVia"
-        ContextKeyValues: ["dynamodb.amazonaws.com"]  # Wrong service
+        ContextKeyValues: ["dynamodb.amazonaws.com"]
         ContextKeyType: "stringList"
       - ContextKeyName: "s3:ResourceAccount"
         ContextKeyValues: ["{{.dummy_account_id}}"]
@@ -206,21 +450,41 @@ tests:
         ContextKeyType: "string"
     expect: "explicitDeny"
 
-  - name: "S3ObjectCalledViaActionsDeny - No CalledVia context"
-    action: "s3:PutObject"
-    resource: "arn:aws:s3:::bucket/new-file.txt"
-    context:
-      # Missing aws:CalledVia - should be denied
-      - ContextKeyName: "s3:ResourceAccount"
-        ContextKeyValues: ["{{.dummy_account_id}}"]
-        ContextKeyType: "string"
-      - ContextKeyName: "s3:x-amz-server-side-encryption-aws-kms-key-id"
-        ContextKeyValues: ["arn:aws:kms:{{.region}}:{{.dummy_account_id}}:key/*"]
-        ContextKeyType: "string"
+  # Test 12: S3ObjectCalledViaActionsDeny_NoCalledVia
+  - name: "S3ObjectCalledViaActionsDeny_NoCalledVia"
+    actions:
+      - "s3:AbortMultipartUpload"
+      - "s3:BypassGovernanceRetention"
+      - "s3:DeleteObject"
+      - "s3:DeleteObjectTagging"
+      - "s3:DeleteObjectVersion"
+      - "s3:DeleteObjectVersionTagging"
+      - "s3:GetObject"
+      - "s3:GetObjectAcl"
+      - "s3:GetObjectAttributes"
+      - "s3:GetObjectLegalHold"
+      - "s3:GetObjectRetention"
+      - "s3:GetObjectTagging"
+      - "s3:GetObjectVersion"
+      - "s3:GetObjectVersionAcl"
+      - "s3:GetObjectVersionAttributes"
+      - "s3:GetObjectVersionTagging"
+      - "s3:ListMultipartUploadParts"
+      - "s3:PutObject"
+      - "s3:PutObjectAcl"
+      - "s3:PutObjectLegalHold"
+      - "s3:PutObjectRetention"
+      - "s3:PutObjectTagging"
+      - "s3:PutObjectVersionAcl"
+      - "s3:PutObjectVersionTagging"
+      - "s3:RestoreObject"
+    resource: "arn:aws:s3:::*/*"
     expect: "explicitDeny"
 
-  - name: "S3ObjectEncryptionActionsDeny - PutObject without encryption"
-    action: "s3:PutObject"
+  # Test 13: S3ObjectEncryptionActionsDeny
+  - name: "S3ObjectEncryptionActionsDeny"
+    actions:
+      - "s3:PutObject"
     resource: "arn:aws:s3:::testbucket/testobject"
     context:
       - ContextKeyName: "aws:CalledVia"
@@ -229,18 +493,104 @@ tests:
       - ContextKeyName: "s3:ResourceAccount"
         ContextKeyValues: ["{{.dummy_account_id}}"]
         ContextKeyType: "string"
-      # Missing encryption key - should be denied
     expect: "explicitDeny"
 
-  - name: "S3ResourceOwnerActionsDeny - Wrong resource account"
-    action: "s3:GetObject"
-    resource: "arn:aws:s3:::other-account-bucket/data.json"
+  # Test 14: S3ResourceOwnerActionsDeny
+  - name: "S3ResourceOwnerActionsDeny"
+    actions:
+      - "s3:AbortMultipartUpload"
+      - "s3:BypassGovernanceRetention"
+      - "s3:CreateBucket"
+      - "s3:CreateBucketMetadataTableConfiguration"
+      - "s3:DeleteBucket"
+      - "s3:DeleteBucketMetadataTableConfiguration"
+      - "s3:DeleteBucketPolicy"
+      - "s3:DeleteBucketWebsite"
+      - "s3:DeleteObject"
+      - "s3:DeleteObjectTagging"
+      - "s3:DeleteObjectVersion"
+      - "s3:DeleteObjectVersionTagging"
+      - "s3:GetAccelerateConfiguration"
+      - "s3:GetAnalyticsConfiguration"
+      - "s3:GetBucketAcl"
+      - "s3:GetBucketCORS"
+      - "s3:GetBucketLocation"
+      - "s3:GetBucketLogging"
+      - "s3:GetBucketMetadataTableConfiguration"
+      - "s3:GetBucketNotification"
+      - "s3:GetBucketObjectLockConfiguration"
+      - "s3:GetBucketOwnershipControls"
+      - "s3:GetBucketPolicy"
+      - "s3:GetBucketPolicyStatus"
+      - "s3:GetBucketPublicAccessBlock"
+      - "s3:GetBucketRequestPayment"
+      - "s3:GetBucketTagging"
+      - "s3:GetBucketVersioning"
+      - "s3:GetBucketWebsite"
+      - "s3:GetEncryptionConfiguration"
+      - "s3:GetIntelligentTieringConfiguration"
+      - "s3:GetInventoryConfiguration"
+      - "s3:GetLifecycleConfiguration"
+      - "s3:GetMetricsConfiguration"
+      - "s3:GetObject"
+      - "s3:GetObjectAcl"
+      - "s3:GetObjectAttributes"
+      - "s3:GetObjectLegalHold"
+      - "s3:GetObjectRetention"
+      - "s3:GetObjectTagging"
+      - "s3:GetObjectTorrent"
+      - "s3:GetObjectVersion"
+      - "s3:GetObjectVersionAcl"
+      - "s3:GetObjectVersionAttributes"
+      - "s3:GetObjectVersionForReplication"
+      - "s3:GetObjectVersionTagging"
+      - "s3:GetObjectVersionTorrent"
+      - "s3:GetReplicationConfiguration"
+      - "s3:InitiateReplication"
+      - "s3:ListBucket"
+      - "s3:ListBucketMultipartUploads"
+      - "s3:ListBucketVersions"
+      - "s3:ListMultipartUploadParts"
+      - "s3:ObjectOwnerOverrideToBucketOwner"
+      - "s3:PauseReplication"
+      - "s3:PutAccelerateConfiguration"
+      - "s3:PutAnalyticsConfiguration"
+      - "s3:PutBucketAcl"
+      - "s3:PutBucketCORS"
+      - "s3:PutBucketLogging"
+      - "s3:PutBucketNotification"
+      - "s3:PutBucketObjectLockConfiguration"
+      - "s3:PutBucketOwnershipControls"
+      - "s3:PutBucketPolicy"
+      - "s3:PutBucketPublicAccessBlock"
+      - "s3:PutBucketRequestPayment"
+      - "s3:PutBucketTagging"
+      - "s3:PutBucketVersioning"
+      - "s3:PutBucketWebsite"
+      - "s3:PutEncryptionConfiguration"
+      - "s3:PutIntelligentTieringConfiguration"
+      - "s3:PutInventoryConfiguration"
+      - "s3:PutLifecycleConfiguration"
+      - "s3:PutMetricsConfiguration"
+      - "s3:PutObject"
+      - "s3:PutObjectAcl"
+      - "s3:PutObjectLegalHold"
+      - "s3:PutObjectRetention"
+      - "s3:PutObjectTagging"
+      - "s3:PutObjectVersionAcl"
+      - "s3:PutObjectVersionTagging"
+      - "s3:PutReplicationConfiguration"
+      - "s3:ReplicateDelete"
+      - "s3:ReplicateObject"
+      - "s3:ReplicateTags"
+      - "s3:RestoreObject"
+    resource: "arn:aws:s3:::*"
     context:
       - ContextKeyName: "aws:CalledVia"
         ContextKeyValues: ["athena.amazonaws.com"]
         ContextKeyType: "stringList"
       - ContextKeyName: "s3:ResourceAccount"
-        ContextKeyValues: ["{{.dns_hub_dev_account_id}}"]  # Wrong account
+        ContextKeyValues: ["{{.dns_hub_live_account_id}}"]
         ContextKeyType: "string"
       - ContextKeyName: "s3:x-amz-server-side-encryption-aws-kms-key-id"
         ContextKeyValues: ["arn:aws:kms:{{.region}}:{{.dummy_account_id}}:key/*"]

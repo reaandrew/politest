@@ -1,0 +1,171 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "athena:ListEngineVersions",
+        "athena:ListTagsForResource",
+        "athena:ListWorkGroups"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "AthenaActionsAllow"
+    },
+    {
+      "Action": [
+        "athena:BatchGetNamedQuery",
+        "athena:BatchGetPreparedStatement",
+        "athena:BatchGetQueryExecution",
+        "athena:CreateNamedQuery",
+        "athena:CreatePreparedStatement",
+        "athena:DeleteNamedQuery",
+        "athena:DeletePreparedStatement",
+        "athena:GetNamedQuery",
+        "athena:GetPreparedStatement",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "athena:GetQueryResultsStream",
+        "athena:GetQueryRuntimeStatistics",
+        "athena:GetWorkGroup",
+        "athena:ListNamedQueries",
+        "athena:ListPreparedStatements",
+        "athena:ListQueryExecutions",
+        "athena:StartQueryExecution",
+        "athena:StopQueryExecution",
+        "athena:UpdateNamedQuery",
+        "athena:UpdatePreparedStatement"
+      ],
+      "Resource": [
+        "arn:aws:athena:eu-west-2:123456789123:workgroup/*",
+        "arn:aws:athena:eu-west-2:123456789124:workgroup/*",
+        "arn:aws:athena:eu-west-2:123456789125:workgroup/*"
+      ],
+      "Effect": "Allow",
+      "Sid": "AthenaWorkgroupActionsAllow"
+    },
+    {
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::*",
+      "Effect": "Allow",
+      "Sid": "S3BucketActionsAllow"
+    },
+    {
+      "Action": [
+        "s3:AbortMultipartUpload",
+        "s3:GetObject",
+        "s3:ListMultipartUploadParts",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::*/*",
+      "Effect": "Allow",
+      "Sid": "S3ObjectActionsAllow"
+    },
+    {
+      "Condition": {
+        "ForAnyValue:StringLike": {
+          "aws:ResourceOrgPaths": "${DATA_PLANE_NONPROD_ORG_PATH}/*"
+        },
+        "StringNotEquals": {
+          "aws:VpceAccount": "${DNS_HUB_DEV_ACCOUNT_ID}"
+        }
+      },
+      "Action": "athena:*",
+      "Resource": "arn:aws:athena:*:*:workgroup/*",
+      "Effect": "Deny",
+      "Sid": "AthenaWorkgroupNonProdQueryActionsDeny"
+    },
+    {
+      "Condition": {
+        "ForAnyValue:StringLike": {
+          "aws:ResourceOrgPaths": "${DATA_PLANE_PROD_ORG_PATH}/*"
+        },
+        "StringNotEquals": {
+          "aws:VpceAccount": "${DNS_HUB_LIVE_ACCOUNT_ID}"
+        }
+      },
+      "Action": "athena:*",
+      "Resource": "arn:aws:athena:*:*:workgroup/*",
+      "Effect": "Deny",
+      "Sid": "AthenaWorkgroupProdQueryActionsDeny"
+    },
+    {
+      "Action": "athena:*",
+      "Resource": "arn:aws:athena:*:*:workgroup/primary",
+      "Effect": "Deny",
+      "Sid": "AthenaWorkgroupActionsDeny"
+    },
+    {
+      "Action": [
+        "s3:Create*",
+        "s3:Delete*",
+        "s3:Put*"
+      ],
+      "Resource": "arn:aws:s3:::<ACCOUNT_NO>-*",
+      "Effect": "Deny",
+      "Sid": "S3BucketAccountBucketActionsDeny"
+    },
+    {
+      "Action": [
+        "s3:Delete*",
+        "s3:Get*",
+        "s3:Put*",
+        "s3:RestoreObject"
+      ],
+      "Resource": "arn:aws:s3:::<ACCOUNT_NO>-*/*",
+      "Effect": "Deny",
+      "Sid": "S3ObjectAccountObjectActionsDeny"
+    },
+    {
+      "Condition": {
+        "StringNotEquals": {
+          "s3:x-amz-acl": "bucket-owner-full-control"
+        }
+      },
+      "Action": [
+        "s3:PutObjectAcl",
+        "s3:PutObjectVersionAcl"
+      ],
+      "Resource": "arn:aws:s3:::*/*",
+      "Effect": "Deny",
+      "Sid": "S3ObjectAclActionsDeny"
+    },
+    {
+      "Condition": {
+        "ForAllValues:StringNotEquals": {
+          "aws:CalledVia": [
+            "athena.amazonaws.com"
+          ]
+        }
+      },
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::*/*",
+      "Effect": "Deny",
+      "Sid": "S3ObjectCalledViaActionsDeny"
+    },
+    {
+      "Condition": {
+        "ArnNotLike": {
+          "s3:x-amz-server-side-encryption-aws-kms-key-id": "arn:aws:kms:eu-west-2:<ACCOUNT_NO>:key/*"
+        }
+      },
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::*/*",
+      "Effect": "Deny",
+      "Sid": "S3ObjectEncryptionActionsDeny"
+    },
+    {
+      "Condition": {
+        "StringNotEquals": {
+          "s3:ResourceAccount": "<ACCOUNT_NO>"
+        }
+      },
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::*",
+      "Effect": "Deny",
+      "Sid": "S3ResourceOwnerActionsDeny"
+    }
+  ]
+}
