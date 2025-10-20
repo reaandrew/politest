@@ -20,6 +20,25 @@
 [![Semgrep](https://img.shields.io/badge/Semgrep-Enabled-blueviolet?logo=semgrep)](https://semgrep.dev/)
 [![GitGuardian](https://img.shields.io/badge/GitGuardian-Monitored-blue?logo=git)](https://www.gitguardian.com/)
 
+## Supply Chain Security
+
+[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev/)
+
+All release binaries are built with [SLSA Level 3](https://slsa.dev/) provenance attestations, providing:
+
+- **Verifiable Builds** - Cryptographic proof that binaries were built from this repository's source code
+- **Tamper Protection** - Detect if binaries were modified after build
+- **Build Transparency** - Complete audit trail showing exact source, build time, and build process
+- **Supply Chain Defense** - Protection against compromised build servers and malicious insider modifications
+
+Users can verify binary authenticity using [slsa-verifier](https://github.com/slsa-framework/slsa-verifier):
+
+```bash
+slsa-verifier verify-artifact politest-linux-amd64 \
+  --provenance-path politest-linux-amd64.intoto.jsonl \
+  --source-uri github.com/reaandrew/politest
+```
+
 ## Project Info
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/reaandrew/politest)](https://go.dev/)
@@ -517,6 +536,7 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
 - Cross-platform builds
 - Integration tests against real AWS API
 - Semantic versioning releases
+- SLSA Level 3 provenance generation for all release binaries
 
 ## Tips
 
