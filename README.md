@@ -12,17 +12,22 @@
 [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
 [![Go Report Card](https://goreportcard.com/badge/github.com/reaandrew/politest)](https://goreportcard.com/report/github.com/reaandrew/politest)
+[![Dependabot](https://img.shields.io/badge/Dependabot-Enabled-025e8c?logo=dependabot)](https://github.com/reaandrew/politest/network/updates)
 
 ## Security
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/reaandrew/politest/badge)](https://scorecard.dev/viewer/?uri=github.com/reaandrew/politest)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=reaandrew_politest&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=reaandrew_politest)
+[![CodeQL](https://github.com/reaandrew/politest/actions/workflows/codeql.yml/badge.svg)](https://github.com/reaandrew/politest/actions/workflows/codeql.yml)
 [![Semgrep](https://img.shields.io/badge/Semgrep-Enabled-blueviolet?logo=semgrep)](https://semgrep.dev/)
 [![GitGuardian](https://img.shields.io/badge/GitGuardian-Monitored-blue?logo=git)](https://www.gitguardian.com/)
 
 ## Supply Chain Security
 
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev/)
+[![Dependency Review](https://github.com/reaandrew/politest/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/reaandrew/politest/actions/workflows/dependency-review.yml)
+[![StepSecurity](https://img.shields.io/badge/StepSecurity-Enabled-success?logo=security)](https://www.stepsecurity.io/)
 
 All release binaries are built with [SLSA Level 3](https://slsa.dev/) provenance attestations, providing:
 
