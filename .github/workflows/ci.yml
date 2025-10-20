@@ -419,7 +419,8 @@ jobs:
       id-token: write  # To sign the provenance
       contents: write  # To upload assets to release
       actions: read    # To read the workflow path
-    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    # SLSA builders require tag refs (not SHAs) - this is a SLSA framework requirement
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0  # NOSONAR
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/linux-amd64.yml
@@ -434,7 +435,8 @@ jobs:
       id-token: write
       contents: write
       actions: read
-    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    # SLSA builders require tag refs (not SHAs) - this is a SLSA framework requirement
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0  # NOSONAR
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/linux-arm64.yml
@@ -449,7 +451,8 @@ jobs:
       id-token: write
       contents: write
       actions: read
-    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    # SLSA builders require tag refs (not SHAs) - this is a SLSA framework requirement
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0  # NOSONAR
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/darwin-amd64.yml
@@ -464,7 +467,8 @@ jobs:
       id-token: write
       contents: write
       actions: read
-    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    # SLSA builders require tag refs (not SHAs) - this is a SLSA framework requirement
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0  # NOSONAR
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/darwin-arm64.yml
@@ -479,7 +483,8 @@ jobs:
       id-token: write
       contents: write
       actions: read
-    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    # SLSA builders require tag refs (not SHAs) - this is a SLSA framework requirement
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0  # NOSONAR
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/windows-amd64.yml
@@ -494,7 +499,8 @@ jobs:
       id-token: write
       contents: write
       actions: read
-    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    # SLSA builders require tag refs (not SHAs) - this is a SLSA framework requirement
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0  # NOSONAR
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/windows-arm64.yml
