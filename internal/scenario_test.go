@@ -34,18 +34,6 @@ func TestMergeScenario(t *testing.T) {
 			},
 		},
 		{
-			name: "child replaces parent actions",
-			parent: Scenario{
-				Actions: []string{"s3:GetObject", "s3:PutObject"},
-			},
-			child: Scenario{
-				Actions: []string{"s3:DeleteObject"},
-			},
-			expected: Scenario{
-				Actions: []string{"s3:DeleteObject"}, // replaced, not merged
-			},
-		},
-		{
 			name: "child overrides policy fields",
 			parent: Scenario{
 				PolicyJSON:     "parent.json",
@@ -56,25 +44,6 @@ func TestMergeScenario(t *testing.T) {
 			},
 			expected: Scenario{
 				PolicyJSON: "child.json",
-			},
-		},
-		{
-			name: "merge expect maps",
-			parent: Scenario{
-				Expect: map[string]string{
-					"s3:GetObject": "allowed",
-				},
-			},
-			child: Scenario{
-				Expect: map[string]string{
-					"s3:PutObject": "denied",
-				},
-			},
-			expected: Scenario{
-				Expect: map[string]string{
-					"s3:GetObject": "allowed",
-					"s3:PutObject": "denied",
-				},
 			},
 		},
 		{
@@ -110,30 +79,9 @@ func TestMergeScenario(t *testing.T) {
 				}
 			}
 
-			// Check Actions
-			if len(tt.expected.Actions) > 0 {
-				if len(result.Actions) != len(tt.expected.Actions) {
-					t.Errorf("Actions length = %v, want %v", len(result.Actions), len(tt.expected.Actions))
-				}
-				for i, action := range tt.expected.Actions {
-					if i < len(result.Actions) && result.Actions[i] != action {
-						t.Errorf("Actions[%d] = %v, want %v", i, result.Actions[i], action)
-					}
-				}
-			}
-
 			// Check PolicyJSON
 			if tt.expected.PolicyJSON != "" && result.PolicyJSON != tt.expected.PolicyJSON {
 				t.Errorf("PolicyJSON = %v, want %v", result.PolicyJSON, tt.expected.PolicyJSON)
-			}
-
-			// Check Expect
-			if len(tt.expected.Expect) > 0 {
-				for k, v := range tt.expected.Expect {
-					if result.Expect[k] != v {
-						t.Errorf("Expect[%s] = %v, want %v", k, result.Expect[k], v)
-					}
-				}
 			}
 
 			// Check Context - slices are replaced, not merged
@@ -154,8 +102,9 @@ func TestLoadYAML(t *testing.T) {
 		content := `
 vars:
   bucket: test-bucket
-actions:
-  - s3:GetObject
+tests:
+  - action: s3:GetObject
+    resource: "*"
 `
 		if err := os.WriteFile(file, []byte(content), 0644); err != nil {
 			t.Fatal(err)
@@ -188,8 +137,9 @@ func TestLoadScenarioWithExtends(t *testing.T) {
 	parentContent := `
 vars:
   bucket: parent-bucket
-actions:
-  - s3:GetObject
+tests:
+  - action: s3:GetObject
+    resource: "*"
 `
 	if err := os.WriteFile(parentFile, []byte(parentContent), 0644); err != nil {
 		t.Fatal(err)
@@ -221,9 +171,9 @@ vars:
 		t.Errorf("Vars[region] = %v, want us-east-1", result.Vars["region"])
 	}
 
-	// Check inherited actions
-	if len(result.Actions) == 0 || result.Actions[0] != "s3:GetObject" {
-		t.Errorf("Actions not inherited correctly")
+	// Check inherited tests
+	if len(result.Tests) == 0 || result.Tests[0].Action != "s3:GetObject" {
+		t.Errorf("Tests not inherited correctly")
 	}
 }
 
@@ -239,13 +189,8 @@ func TestMergeScenarioComprehensive(t *testing.T) {
 			ResourceOwner:          "123456789012",
 			ResourceHandlingOption: "EC2-VPC-InstanceStore",
 			SCPPaths:               []string{"parent-scp1.json", "parent-scp2.json"},
-			Actions:                []string{"s3:GetObject"},
-			Resources:              []string{"arn:aws:s3:::parent-bucket/*"},
 			Context: []ContextEntryYml{
 				{ContextKeyName: "aws:userid", ContextKeyValues: []string{"parent"}, ContextKeyType: "string"},
-			},
-			Expect: map[string]string{
-				"s3:GetObject": "allowed",
 			},
 			Tests: []TestCase{
 				{Name: "parent-test", Action: "s3:GetObject"},
@@ -266,13 +211,8 @@ func TestMergeScenarioComprehensive(t *testing.T) {
 			ResourceOwner:          "456789012345",
 			ResourceHandlingOption: "EC2-Classic",
 			SCPPaths:               []string{"child-scp.json"},
-			Actions:                []string{"s3:PutObject"},
-			Resources:              []string{"arn:aws:s3:::child-bucket/*"},
 			Context: []ContextEntryYml{
 				{ContextKeyName: "aws:username", ContextKeyValues: []string{"child"}, ContextKeyType: "string"},
-			},
-			Expect: map[string]string{
-				"s3:PutObject": "denied",
 			},
 			Tests: []TestCase{
 				{Name: "child-test", Action: "s3:PutObject"},
@@ -322,21 +262,7 @@ func TestMergeScenarioComprehensive(t *testing.T) {
 			t.Errorf("Vars[region] = %v, want us-west-2", result.Vars["region"])
 		}
 
-		// Expect should be merged
-		if result.Expect["s3:GetObject"] != "allowed" {
-			t.Errorf("Expect[s3:GetObject] = %v, want allowed", result.Expect["s3:GetObject"])
-		}
-		if result.Expect["s3:PutObject"] != "denied" {
-			t.Errorf("Expect[s3:PutObject] = %v, want denied", result.Expect["s3:PutObject"])
-		}
-
 		// Slices should be replaced
-		if len(result.Actions) != 1 || result.Actions[0] != "s3:PutObject" {
-			t.Errorf("Actions = %v, want [s3:PutObject]", result.Actions)
-		}
-		if len(result.Resources) != 1 || result.Resources[0] != "arn:aws:s3:::child-bucket/*" {
-			t.Errorf("Resources = %v, want [child-bucket]", result.Resources)
-		}
 		if len(result.SCPPaths) != 1 || result.SCPPaths[0] != "child-scp.json" {
 			t.Errorf("SCPPaths = %v, want [child-scp.json]", result.SCPPaths)
 		}
@@ -373,8 +299,9 @@ func TestLoadScenarioWithExtendsMultipleLevels(t *testing.T) {
 vars:
   level: grandparent
   bucket: grandparent-bucket
-actions:
-  - s3:GetObject
+tests:
+  - action: s3:GetObject
+    resource: "*"
 `
 	if err := os.WriteFile(grandparentFile, []byte(grandparentContent), 0644); err != nil {
 		t.Fatal(err)
@@ -423,9 +350,9 @@ vars:
 		t.Errorf("Vars[env] = %v, want prod", result.Vars["env"])
 	}
 
-	// Actions should be inherited from grandparent
-	if len(result.Actions) == 0 || result.Actions[0] != "s3:GetObject" {
-		t.Errorf("Actions not inherited correctly: %v", result.Actions)
+	// Tests should be inherited from grandparent
+	if len(result.Tests) == 0 || result.Tests[0].Action != "s3:GetObject" {
+		t.Errorf("Tests not inherited correctly: %v", result.Tests)
 	}
 }
 
@@ -537,33 +464,6 @@ func TestMergeScenarioWithContext(t *testing.T) {
 	}
 	if result.Context[0].ContextKeyValues[0] != "child-user" {
 		t.Errorf("Expected child context, got %s", result.Context[0].ContextKeyValues[0])
-	}
-}
-
-func TestMergeScenarioWithExpectDeepMerge(t *testing.T) {
-	parent := Scenario{
-		Expect: map[string]string{
-			"s3:GetObject": "allowed",
-			"s3:PutObject": "denied",
-		},
-	}
-	child := Scenario{
-		Expect: map[string]string{
-			"s3:DeleteObject": "denied",
-		},
-	}
-
-	result := MergeScenario(parent, child)
-
-	// Expect should be deep-merged
-	if len(result.Expect) != 3 {
-		t.Errorf("Expected 3 expectations, got %d", len(result.Expect))
-	}
-	if result.Expect["s3:GetObject"] != "allowed" {
-		t.Error("Parent expectation should be preserved")
-	}
-	if result.Expect["s3:DeleteObject"] != "denied" {
-		t.Error("Child expectation should be added")
 	}
 }
 

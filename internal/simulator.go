@@ -12,86 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 )
 
-// RunLegacyFormat executes policy simulation in legacy format (actions + resources + expect map)
-func RunLegacyFormat(client IAMSimulator, scen *Scenario, cfg SimulatorConfig) {
-	// Render actions/resources/context with Go templates
-	actions := RenderStringSlice(scen.Actions, cfg.Variables)
-	resources := RenderStringSlice(scen.Resources, cfg.Variables)
-	ctxEntries, err := RenderContext(scen.Context, cfg.Variables)
-	Check(err)
-
-	// Build and execute AWS API call
-	input := buildSimulateInput(cfg, scen, actions, resources, ctxEntries)
-	resp, err := client.SimulateCustomPolicy(context.Background(), input)
-	Check(err)
-
-	// Process and display results
-	_ = processAndDisplayResults(resp)
-
-	// Save raw JSON if requested
-	saveResponseIfRequested(cfg.SavePath, resp)
-
-	// Check expectations against ALL evaluation results (not just the map)
-	// This ensures we catch failures when the same action is tested on multiple resources
-	checkExpectationsAgainstAllResults(scen.Expect, resp.EvaluationResults, cfg.NoAssert)
-}
-
-// buildSimulateInput creates the IAM simulation input from scenario and config
-func buildSimulateInput(cfg SimulatorConfig, scen *Scenario, actions, resources []string, ctxEntries []types.ContextEntry) *iam.SimulateCustomPolicyInput {
-	input := &iam.SimulateCustomPolicyInput{
-		PolicyInputList: []string{cfg.PolicyJSON},
-		ActionNames:     actions,
-		ResourceArns:    resources,
-		ContextEntries:  ctxEntries,
-	}
-	if cfg.PermissionsBoundary != "" {
-		input.PermissionsBoundaryPolicyInputList = []string{cfg.PermissionsBoundary}
-	}
-	if cfg.ResourcePolicyJSON != "" {
-		input.ResourcePolicy = &cfg.ResourcePolicyJSON
-	}
-	if scen.CallerArn != "" {
-		rendered := RenderString(scen.CallerArn, cfg.Variables)
-		input.CallerArn = &rendered
-	}
-	if scen.ResourceOwner != "" {
-		rendered := RenderString(scen.ResourceOwner, cfg.Variables)
-		input.ResourceOwner = &rendered
-	}
-	if scen.ResourceHandlingOption != "" {
-		input.ResourceHandlingOption = &scen.ResourceHandlingOption
-	}
-	return input
-}
-
-// processAndDisplayResults processes evaluation results and displays them in a table
-// When multiple resources are tested with the same action, returns the decision map
-// with action as key. For multiple resources with same action, the last result is stored
-// but all results are displayed in the table.
-func processAndDisplayResults(resp *iam.SimulateCustomPolicyOutput) map[string]string {
-	rows := make([][3]string, 0, len(resp.EvaluationResults))
-	evals := map[string]string{}
-	for _, r := range resp.EvaluationResults {
-		act := AwsString(r.EvalActionName)
-		res := AwsString(r.EvalResourceName)
-		dec := string(r.EvalDecision)
-
-		// Store decision in map (will be overwritten if same action appears multiple times)
-		evals[act] = dec
-
-		// Display with resource name if available
-		actionDisplay := act
-		if res != "" && res != "*" {
-			actionDisplay = fmt.Sprintf("%s on %s", act, res)
-		}
-
-		detail := extractMatchedStatements(r.MatchedStatements)
-		rows = append(rows, [3]string{actionDisplay, dec, detail})
-	}
-	PrintTable(rows)
-	return evals
-}
-
 // extractMatchedStatements extracts source policy IDs from matched statements
 func extractMatchedStatements(matched []types.Statement) string {
 	if len(matched) == 0 {
@@ -117,42 +37,6 @@ func saveResponseIfRequested(savePath string, resp any) {
 		b, _ := json.MarshalIndent(resp, "", "  ")
 		Check(os.WriteFile(savePath, b, 0o600))
 		fmt.Printf("\nSaved raw response → %s (permissions: 0600)\n", savePath)
-	}
-}
-
-// checkExpectationsAgainstAllResults checks expectations against ALL evaluation results
-// This is critical for legacy mode with multiple resources, as it ensures we catch
-// failures even when the same action is tested on multiple resources with different outcomes
-func checkExpectationsAgainstAllResults(expect map[string]string, results []types.EvaluationResult, noAssert bool) {
-	if len(expect) == 0 {
-		return // No expectations to check
-	}
-
-	failures := []string{}
-	for _, r := range results {
-		action := AwsString(r.EvalActionName)
-		resource := AwsString(r.EvalResourceName)
-		decision := string(r.EvalDecision)
-
-		// Check if we have an expectation for this action
-		if wantDecision, ok := expect[action]; ok {
-			if !strings.EqualFold(decision, wantDecision) {
-				resourceStr := "*"
-				if resource != "" && resource != "*" {
-					resourceStr = resource
-				}
-				failMsg := fmt.Sprintf("%s on %s: expected %s, got %s", action, resourceStr, wantDecision, decision)
-				failures = append(failures, failMsg)
-			}
-		}
-	}
-
-	if len(failures) > 0 && !noAssert {
-		fmt.Println("\nExpectation failures:")
-		for _, msg := range failures {
-			fmt.Printf("  - %s\n", msg)
-		}
-		GlobalExiter.Exit(2)
 	}
 }
 

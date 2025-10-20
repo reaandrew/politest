@@ -62,9 +62,9 @@ politest --scenario scenarios/my-test.yml
   - Use `policy_template` for policies with variables
   - Or `policy_json` for pre-rendered JSON policies
 
-- **Flexible test formats**
-  - Legacy format: `actions` + `resources` arrays
-  - Collection format: `tests` array with named test cases
+- **Test collection format**
+  - `tests` array with named test cases
+  - Supports `actions` array expansion for convenience
 
 - **SCP/RCP merging**
   - From multiple files/globs into permissions boundaries
@@ -149,22 +149,17 @@ Every scenario must have:
   - For policies without variables
   - Used as-is, no template rendering
 
-**2. Tests** - Choose one format:
+**2. Tests** - Required:
 
-**Legacy Format** (backward compatible):
-```yaml
-actions: ["action1", "action2"]
-resources: ["arn:..."]
-expect:
-  "action1": "allowed"
-  "action2": "denied"
-```
-
-**Collection Format** (recommended):
 ```yaml
 tests:
   - name: "Test description"
     action: "action1"
+    resource: "arn:..."
+    expect: "allowed"
+
+  - name: "Another test"
+    actions: ["action2", "action3"]  # Expands to multiple tests
     resource: "arn:..."
     expect: "allowed"
 ```
@@ -241,10 +236,14 @@ vars:
   bucket: "data"
 
 policy_template: "policy.json"  # Contains ${ACCOUNT_ID}
-resources:
-  - "arn:aws:s3:::{{.bucket}}/*"  # Go template
-  - "arn:aws:iam::$account_id:role/*"  # Shell style
-  - "arn:aws:iam::<ACCOUNT_ID>:user/*"  # Angle brackets
+
+tests:
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::{{.bucket}}/*"  # Go template
+  - action: "iam:GetRole"
+    resource: "arn:aws:iam::$account_id:role/*"  # Shell style
+  - action: "iam:GetUser"
+    resource: "arn:aws:iam::<ACCOUNT_ID>:user/*"  # Angle brackets
 ```
 
 **Note:** All formats are converted to Go templates internally, so variable names are case-sensitive.
@@ -299,36 +298,7 @@ policy_json: "policies/static-policy.json"
 
 ## Test Formats
 
-### Legacy Format
-
-Test multiple actions against multiple resources:
-
-```yaml
-policy_json: "policies/s3.json"
-
-actions:
-  - "s3:GetObject"
-  - "s3:PutObject"
-  - "s3:DeleteObject"
-
-resources:
-  - "arn:aws:s3:::bucket1/*"
-  - "arn:aws:s3:::bucket2/*"
-
-expect:
-  "s3:GetObject": "allowed"
-  "s3:PutObject": "allowed"
-  "s3:DeleteObject": "denied"
-```
-
-**How it works:**
-- Creates a cartesian product: 3 actions × 2 resources = 6 tests
-- All tests use the same context and conditions
-- Good for bulk testing similar scenarios
-
-### Collection Format
-
-Individual test cases with descriptive names:
+The test collection format provides individual test cases with descriptive names and flexible configuration:
 
 ```yaml
 policy_json: "policies/s3.json"
@@ -356,19 +326,7 @@ tests:
 - Each test can have different context
 - Better for complex scenarios
 - Easier to debug failures
-
-### Choosing a Format
-
-**Use Legacy Format when:**
-- Testing many similar actions/resources
-- All tests share the same context
-- You want concise configuration
-
-**Use Collection Format when:**
-- You need descriptive test names
-- Tests have different contexts
-- Tests have different resources
-- You need granular control
+- Supports `actions` array expansion for testing multiple actions with same configuration
 
 ---
 
@@ -376,22 +334,7 @@ tests:
 
 ### Single vs Array
 
-Both formats support singular and plural forms:
-
-#### In Legacy Format (Scenario Level)
-
-```yaml
-# Required - array of actions
-actions:
-  - "s3:GetObject"
-  - "s3:PutObject"
-
-# Optional - array of resources (defaults to "*")
-resources:
-  - "arn:aws:s3:::bucket/*"
-```
-
-#### In Collection Format (Test Level)
+Tests support both singular and plural forms for flexibility:
 
 **Single action/resource:**
 ```yaml
@@ -424,10 +367,10 @@ tests:
     expect: "allowed"
 ```
 
-**Both arrays:**
+**Actions array expansion:**
 ```yaml
 tests:
-  - name: "Cartesian product test"
+  - name: "Test multiple actions"
     actions:
       - "s3:GetObject"
       - "s3:PutObject"
@@ -435,7 +378,8 @@ tests:
       - "arn:aws:s3:::bucket1/*"
       - "arn:aws:s3:::bucket2/*"
     expect: "allowed"
-    # Creates: 2 actions × 2 resources = 4 test executions
+    # Expands to 2 separate tests (one per action)
+    # Each test uses both resources
 ```
 
 ---

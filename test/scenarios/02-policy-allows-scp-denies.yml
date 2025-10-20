@@ -7,15 +7,15 @@ scp_paths:
   - "../scp/permissive.json"
   - "../scp/deny-s3.json"
 
-actions:
-  - "s3:GetObject"
-  - "s3:PutObject"
-  - "s3:ListBucket"
+tests:
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "explicitDeny"
 
-resources:
-  - "arn:aws:s3:::test-bucket/*"
+  - action: "s3:PutObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "explicitDeny"
 
-expect:
-  "s3:GetObject": "explicitDeny"
-  "s3:PutObject": "explicitDeny"
-  "s3:ListBucket": "explicitDeny"
+  - action: "s3:ListBucket"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "explicitDeny"

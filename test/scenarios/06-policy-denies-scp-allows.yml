@@ -6,13 +6,11 @@ policy_json: "../policies/allow-ec2.json"
 scp_paths:
   - "../scp/permissive.json"
 
-actions:
-  - "s3:GetObject"
-  - "s3:PutObject"
+tests:
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "implicitDeny"
 
-resources:
-  - "arn:aws:s3:::test-bucket/*"
-
-expect:
-  "s3:GetObject": "implicitDeny"
-  "s3:PutObject": "implicitDeny"
+  - action: "s3:PutObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "implicitDeny"

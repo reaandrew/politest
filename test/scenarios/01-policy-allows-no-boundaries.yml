@@ -3,15 +3,15 @@
 
 policy_json: "../policies/allow-s3.json"
 
-actions:
-  - "s3:GetObject"
-  - "s3:PutObject"
-  - "s3:ListBucket"
+tests:
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"
 
-resources:
-  - "arn:aws:s3:::test-bucket/*"
+  - action: "s3:PutObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"
 
-expect:
-  "s3:GetObject": "allowed"
-  "s3:PutObject": "allowed"
-  "s3:ListBucket": "allowed"
+  - action: "s3:ListBucket"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"

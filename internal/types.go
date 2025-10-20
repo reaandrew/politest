@@ -13,11 +13,8 @@ type Scenario struct {
 	ResourceOwner          string            `yaml:"resource_owner"`           // optional account ARN that owns resources
 	ResourceHandlingOption string            `yaml:"resource_handling_option"` // optional EC2 scenario (EC2-VPC-InstanceStore, etc)
 	SCPPaths               []string          `yaml:"scp_paths"`                // optional
-	Actions                []string          `yaml:"actions"`                  // required if you want to simulate (legacy format)
-	Resources              []string          `yaml:"resources"`                // optional (legacy format)
 	Context                []ContextEntryYml `yaml:"context"`                  // optional
-	Expect                 map[string]string `yaml:"expect"`                   // optional (action -> decision, legacy format)
-	Tests                  []TestCase        `yaml:"tests"`                    // optional (new collection format)
+	Tests                  []TestCase        `yaml:"tests"`                    // required - array of test cases
 }
 
 // TestCase represents a single test case in the new collection format

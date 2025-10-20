@@ -59,12 +59,6 @@ func mergePolicyFields(out *Scenario, b Scenario) {
 
 // mergeSliceFields merges slice-based fields from b into out
 func mergeSliceFields(out *Scenario, b Scenario) {
-	if len(b.Actions) > 0 {
-		out.Actions = b.Actions
-	}
-	if len(b.Resources) > 0 {
-		out.Resources = b.Resources
-	}
 	if len(b.Context) > 0 {
 		out.Context = b.Context
 	}
@@ -75,14 +69,6 @@ func mergeSliceFields(out *Scenario, b Scenario) {
 
 // mergeMapFields merges map-based fields from b into out
 func mergeMapFields(out *Scenario, b Scenario) {
-	if len(b.Expect) > 0 {
-		if out.Expect == nil {
-			out.Expect = map[string]string{}
-		}
-		for k, v := range b.Expect {
-			out.Expect[k] = v
-		}
-	}
 	if out.Vars == nil {
 		out.Vars = map[string]any{}
 	}

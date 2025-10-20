@@ -7,13 +7,11 @@ scp_paths:
   - "../scp/permissive.json"
   - "../scp/deny-ec2.json"
 
-actions:
-  - "ec2:DescribeInstances"
-  - "ec2:StartInstances"
+tests:
+  - action: "ec2:DescribeInstances"
+    resource: "*"
+    expect: "explicitDeny"
 
-resources:
-  - "*"
-
-expect:
-  "ec2:DescribeInstances": "explicitDeny"
-  "ec2:StartInstances": "explicitDeny"
+  - action: "ec2:StartInstances"
+    resource: "*"
+    expect: "explicitDeny"

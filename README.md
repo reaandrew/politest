@@ -41,9 +41,8 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
   - Use `policy_template` for policies with variables
   - Or `policy_json` for pre-rendered JSON policies
 
-- **Flexible test formats**
-  - Legacy format: `actions` + `resources` arrays
-  - Collection format: `tests` array with named test cases
+- **Test collection format**
+  - `tests` array with named test cases
 
 - **SCP/RCP merging**
   - From multiple files/globs into permissions boundaries
@@ -146,21 +145,24 @@ vars:
 
 policy_template: "../policies/athena_policy.json.tmpl"
 
-actions:
-  - "athena:BatchGetNamedQuery"
-  - "athena:GetQueryExecution"
+tests:
+  - name: "BatchGetNamedQuery should be allowed"
+    action: "athena:BatchGetNamedQuery"
+    resource: "arn:aws:athena:{{ .region }}:{{ .account_id }}:workgroup/{{ .workgroup }}"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+    expect: "allowed"
 
-resources:
-  - "arn:aws:athena:{{ .region }}:{{ .account_id }}:workgroup/{{ .workgroup }}"
-
-context:
-  - ContextKeyName: "aws:CalledVia"
-    ContextKeyValues: ["athena.amazonaws.com"]
-    ContextKeyType: "stringList"
-
-expect:
-  "athena:BatchGetNamedQuery": "allowed"
-  "athena:GetQueryExecution": "allowed"
+  - name: "GetQueryExecution should be allowed"
+    action: "athena:GetQueryExecution"
+    resource: "arn:aws:athena:{{ .region }}:{{ .account_id }}:workgroup/{{ .workgroup }}"
+    context:
+      - ContextKeyName: "aws:CalledVia"
+        ContextKeyValues: ["athena.amazonaws.com"]
+        ContextKeyType: "stringList"
+    expect: "allowed"
 ```
 
 ### 3. Create a policy template (`policies/athena_policy.json.tmpl`)
@@ -241,19 +243,13 @@ Flags:
   - Path to a plain JSON policy file
   - Use when policy has no variables or is already rendered
 
-**Tests** - One of two formats:
+**Tests** - Required:
 
-Legacy format (backward compatible):
-- `actions: ["action1", "action2"]`
-  - Array of IAM actions to test
-- `resources: ["arn:..."]`
-  - Array of resource ARNs to test
-- `expect: {"action": "allowed"}`
-  - Map of action → expected decision
-
-Collection format (recommended):
 - `tests: [{action, resource, expect}]`
   - Array of test cases with individual settings
+  - Each test can have its own action, resources, context, and expectations
+  - Supports both `action` (single) and `actions` (array expansion)
+  - Supports both `resource` (single) and `resources` (array)
   - See examples below for detailed syntax
 
 ### Optional Fields
@@ -271,18 +267,19 @@ Collection format (recommended):
 
 ### Action and Resource Fields
 
-**Single vs Array:**
+**Single vs Array in Tests:**
 
 - `action: "s3:GetObject"`
-  - Single action (used in collection format)
-- `actions: ["s3:GetObject", "s3:PutObject"]`
-  - Multiple actions (used in legacy format)
+  - Single action to test
+- `actions: ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]`
+  - Multiple actions - expands into separate tests (one test per action)
+  - All other test properties (resource, context, expect) are copied to each expanded test
 - `resource: "arn:aws:s3:::bucket/*"`
-  - Single resource (used in collection format)
+  - Single resource ARN
 - `resources: ["arn:aws:s3:::bucket1/*", "arn:aws:s3:::bucket2/*"]`
-  - Multiple resources (used in legacy format)
+  - Multiple resource ARNs tested together
 
-**Note:** Collection format supports both singular and plural forms in individual tests for flexibility.
+**Note:** You can use either `action` or `actions` (not both), and either `resource` or `resources` in each test case.
 
 ### Inheritance with `extends:`
 
@@ -400,16 +397,16 @@ athena:GetQueryExecution      allowed   PolicyInputList.1
 # scenarios/s3_read.yml
 policy_json: "../policies/s3_read.json"
 
-actions:
-  - "s3:GetObject"
-  - "s3:ListBucket"
+tests:
+  - name: "GetObject should be allowed"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::my-bucket/*"
+    expect: "allowed"
 
-resources:
-  - "arn:aws:s3:::my-bucket/*"
-
-expect:
-  "s3:GetObject": "allowed"
-  "s3:ListBucket": "denied"
+  - name: "ListBucket should be denied"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::my-bucket/*"
+    expect: "implicitDeny"
 ```
 
 ### Example 2: Template with Variables
@@ -419,15 +416,17 @@ expect:
 vars:
   table_name: "users-table"
   region: "us-west-2"
+  account_id: "123456789012"
 
 policy_template: "../policies/dynamodb.json.tmpl"
 
-actions:
-  - "dynamodb:GetItem"
-  - "dynamodb:PutItem"
-
-resources:
-  - "arn:aws:dynamodb:{{ .region }}:{{ .account_id }}:table/{{ .table_name }}"
+tests:
+  - name: "DynamoDB access"
+    actions:  # Using actions array - expands to multiple tests
+      - "dynamodb:GetItem"
+      - "dynamodb:PutItem"
+    resource: "arn:aws:dynamodb:{{ .region }}:{{ .account_id }}:table/{{ .table_name }}"
+    expect: "allowed"
 ```
 
 ### Example 3: With SCPs and Context
@@ -442,22 +441,18 @@ scp_paths:
   - "../scp/region-restriction.json"
   - "../scp/instance-type-restriction.json"
 
-actions:
-  - "ec2:RunInstances"
-
-resources:
-  - "*"
-
-context:
-  - ContextKeyName: "aws:RequestedRegion"
-    ContextKeyValues: ["us-east-1"]
-    ContextKeyType: "string"
-  - ContextKeyName: "ec2:InstanceType"
-    ContextKeyValues: ["t3.micro"]
-    ContextKeyType: "string"
-
-expect:
-  "ec2:RunInstances": "denied"  # Should be blocked by SCP
+tests:
+  - name: "RunInstances should be denied by SCP"
+    action: "ec2:RunInstances"
+    resource: "*"
+    context:
+      - ContextKeyName: "aws:RequestedRegion"
+        ContextKeyValues: ["us-east-1"]
+        ContextKeyType: "string"
+      - ContextKeyName: "ec2:InstanceType"
+        ContextKeyValues: ["t3.micro"]
+        ContextKeyType: "string"
+    expect: "explicitDeny"
 ```
 
 ## AWS Credentials

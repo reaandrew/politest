@@ -7,15 +7,15 @@ policy_json: "../policies/allow-dynamodb.json"
 scp_paths:
   - "../rcp/deny-dynamodb.json"
 
-actions:
-  - "dynamodb:GetItem"
-  - "dynamodb:PutItem"
-  - "dynamodb:Query"
+tests:
+  - action: "dynamodb:GetItem"
+    resource: "*"
+    expect: "explicitDeny"
 
-resources:
-  - "*"
+  - action: "dynamodb:PutItem"
+    resource: "*"
+    expect: "explicitDeny"
 
-expect:
-  "dynamodb:GetItem": "explicitDeny"
-  "dynamodb:PutItem": "explicitDeny"
-  "dynamodb:Query": "explicitDeny"
+  - action: "dynamodb:Query"
+    resource: "*"
+    expect: "explicitDeny"

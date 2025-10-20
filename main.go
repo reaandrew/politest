@@ -120,12 +120,9 @@ func main() {
 		NoAssert:            noAssert,
 	}
 
-	// Determine format and run tests
-	if len(scen.Tests) > 0 {
-		// New format: collection of named tests
-		internal.RunTestCollection(client, scen, simCfg)
-	} else {
-		// Legacy format: actions + resources + expect map
-		internal.RunLegacyFormat(client, scen, simCfg)
+	// Validate and run tests
+	if len(scen.Tests) == 0 {
+		internal.Die("scenario must include 'tests' array with at least one test case")
 	}
+	internal.RunTestCollection(client, scen, simCfg)
 }

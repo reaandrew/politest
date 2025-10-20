@@ -27,13 +27,12 @@ cd test && bash run-tests.sh
 
 ### Core Concepts
 
-1. **Scenarios** (`Scenario` struct in main.go:24-45)
-   - YAML files defining policy tests in two formats:
-     - **Legacy format**: Uses `actions` (array), `resources` (array), and `expect` map
-     - **Collection format**: Uses `tests` array with `action` (single) or `actions` (array) per test
+1. **Scenarios** (`Scenario` struct in internal/types.go)
+   - YAML files defining policy tests using collection format
+   - **Collection format**: Uses `tests` array with `action` (single) or `actions` (array expansion) per test
    - Support `extends:` for inheritance (recursive merging)
    - Can reference `policy_template` (for policies with variables) or `policy_json` (for pre-rendered policies)
-   - Both formats support template variables and SCP/RCP merging
+   - Supports template variables and SCP/RCP merging
 
 2. **Variable Templating**
    - Supports multiple formats: `{{.VAR}}`, `${VAR}`, `$VAR`, `<VAR>`
@@ -75,9 +74,9 @@ cd test && bash run-tests.sh
 
 ### Scenario Inheritance (main.go:177-237)
 
-The `loadScenarioWithExtends()` function recursively loads parent scenarios. Child fields override parent fields, with special handling:
-- Maps (`vars`, `expect`) are deep-merged
-- Slices (`actions`, `resources`, `scp_paths`) are replaced entirely
+The `LoadScenarioWithExtends()` function recursively loads parent scenarios. Child fields override parent fields, with special handling:
+- Maps (`vars`) are deep-merged
+- Slices (`tests`, `context`, `scp_paths`) are replaced entirely
 - `policy_template` and `policy_json` are mutually exclusive
 
 ### Context Type Parsing (main.go:290-307)
@@ -94,13 +93,18 @@ Maps YAML string types to AWS SDK enums:
 
 **NOTE**: IpAddress and IpAddressList types are NOT supported by the AWS SDK.
 
-### Expectations and Assertions (main.go:159-172)
+### Expectations and Assertions
 
-The `expect` map defines expected outcomes:
+The `expect` field in each test case defines expected outcomes:
 ```yaml
-expect:
-  "s3:GetObject": "allowed"
-  "s3:DeleteObject": "implicitDeny"
+tests:
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "allowed"
+
+  - action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "implicitDeny"
 ```
 
 Comparisons are case-insensitive using `strings.EqualFold`. Use `--no-assert` flag to skip failing on mismatches.
@@ -119,12 +123,12 @@ Requirements:
 - IAM permission: `iam:SimulateCustomPolicy`
 
 Test scenarios cover:
-1. **01-07**: Legacy format - Basic policy evaluation, SCPs, RCPs, explicit denies
-2. **08-09**: Collection format - Named tests with SCPs
+1. **01-07**: Basic policy evaluation, SCPs, RCPs, explicit denies
+2. **08-09**: Named tests with SCPs
 3. **10-11**: Context conditions - IP, MFA, tags, stringList
 4. **12-13**: Resource policies - Cross-account access, test-level overrides
 5. **14-16**: Variable templating - vars_file, extends:, variable overrides
-6. **17**: RCP in collection format
+6. **17**: RCP support
 7. **18**: Comprehensive - All features combined (inheritance, templates, resource policies, SCPs, cross-account)
 
 ### Unit Tests
@@ -173,22 +177,7 @@ Install hooks: `lefthook install`
 
 ### Adding a New Test Scenario
 
-**Legacy Format** (backwards compatible):
-```yaml
-policy_json: "../policies/my-policy.json"
-scp_paths:
-  - "../scp/permissive.json"
-actions:
-  - "s3:GetObject"
-  - "s3:PutObject"
-resources:
-  - "arn:aws:s3:::test-bucket/*"
-expect:
-  "s3:GetObject": "allowed"
-  "s3:PutObject": "allowed"
-```
-
-**Collection Format** (recommended for new scenarios):
+**Collection Format**:
 ```yaml
 policy_json: "../policies/my-policy.json"
 scp_paths:
@@ -319,17 +308,13 @@ tests:
 
 ### Actions and Resources: Single vs Array
 
-**In Legacy Format (scenario-level):**
-- `actions: ["s3:GetObject", "s3:PutObject"]` - Required array
-- `resources: ["arn:aws:s3:::bucket/*"]` - Optional array
-
-**In Collection Format (test-level):**
+**In Tests (test-level):**
 - `action: "s3:GetObject"` - Single action per test
-- `actions: ["s3:GetObject", "s3:PutObject"]` - Or array to test multiple actions
+- `actions: ["s3:GetObject", "s3:PutObject"]` - Array expands into multiple tests (one per action)
 - `resource: "arn:aws:s3:::bucket/*"` - Single resource per test
-- `resources: ["arn:aws:s3:::bucket1/*", "arn:aws:s3:::bucket2/*"]` - Or array for multiple resources
+- `resources: ["arn:aws:s3:::bucket1/*", "arn:aws:s3:::bucket2/*"]` - Multiple resources tested together
 
-Collection format is more flexible - it expands arrays into individual test executions and provides better test names/output.
+The `actions` array expansion is convenient for testing multiple actions with the same resource/context/expectations.
 
 ### Resource Policies and Cross-Account Testing
 
