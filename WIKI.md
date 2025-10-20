@@ -3,6 +3,7 @@
 ## Table of Contents
 
 - [Getting Started](#getting-started)
+- [Features](#features)
 - [Understanding What politest Tests](#️-understanding-what-politest-tests)
 - [Scenario Configuration](#scenario-configuration)
 - [Variable Formats](#variable-formats)
@@ -46,6 +47,36 @@ go run . --scenario path/to/scenario.yml
 ```bash
 politest --scenario scenarios/my-test.yml
 ```
+
+---
+
+## Features
+
+- **YAML-based scenarios**
+  - Inheritance via `extends:`
+
+- **Multiple variable formats**
+  - `{{.VAR}}`, `${VAR}`, `$VAR`, `<VAR>` syntax support
+
+- **Policy templates**
+  - Use `policy_template` for policies with variables
+  - Or `policy_json` for pre-rendered JSON policies
+
+- **Flexible test formats**
+  - Legacy format: `actions` + `resources` arrays
+  - Collection format: `tests` array with named test cases
+
+- **SCP/RCP merging**
+  - From multiple files/globs into permissions boundaries
+
+- **AWS IAM SimulateCustomPolicy integration**
+  - Test policies before deployment
+
+- **Expectation assertions**
+  - For CI/CD integration
+
+- **Clean table output**
+  - With optional raw JSON export
 
 ---
 
