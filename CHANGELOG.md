@@ -1,3 +1,9 @@
+## [2.1.1](https://github.com/reaandrew/politest/compare/v2.1.0...v2.1.1) (2025-10-20)
+
+### Bug Fixes
+
+* use tag references for SLSA builders with NOSONAR exceptions ([878f550](https://github.com/reaandrew/politest/commit/878f55032926229b5df0f54079d7a4d04a75980e))
+
 ## [2.1.0](https://github.com/reaandrew/politest/compare/v2.0.0...v2.1.0) (2025-10-20)
 
 ### Features
