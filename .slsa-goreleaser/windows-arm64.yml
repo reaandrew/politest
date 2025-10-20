@@ -14,4 +14,6 @@ goarch: arm64
 binary: politest-{{ .Os }}-{{ .Arch }}
 
 ldflags:
-  - "{{ .Env.GOFLAGS_LDFLAGS }}"
+  - -X main.version={{ .Env.VERSION }}
+  - -X main.gitCommit={{ .Env.COMMIT }}
+  - -X main.buildDate={{ .Env.BUILD_DATE }}

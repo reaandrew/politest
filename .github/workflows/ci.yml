@@ -417,16 +417,19 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
-      ldflags: ${{ steps.ldflags.outputs.value }}
+      version: ${{ steps.metadata.outputs.version }}
+      commit: ${{ steps.metadata.outputs.commit }}
+      build_date: ${{ steps.metadata.outputs.build_date }}
     steps:
-      - name: Generate ldflags
-        id: ldflags
+      - name: Generate build metadata
+        id: metadata
         run: |
-          # Build complete ldflags string with version information
+          # Generate individual metadata values (no spaces in values)
           BUILD_DATE=$(date -u -d "${{ github.event.head_commit.timestamp }}" +"%Y-%m-%dT%H:%M:%SZ")
-          LDFLAGS="-X main.version=${{ github.ref_name }} -X main.gitCommit=${{ github.sha }} -X main.buildDate=${BUILD_DATE}"
-          echo "value=$LDFLAGS" >> $GITHUB_OUTPUT
-          echo "Generated ldflags: $LDFLAGS"
+          echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "commit=${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
+          echo "Generated metadata: version=${{ github.ref_name }}, commit=${{ github.sha }}, date=${BUILD_DATE}"
 
   slsa-build-linux-amd64:
     name: SLSA Build linux-amd64
@@ -441,7 +444,7 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/linux-amd64.yml
-      evaluated-envs: "GOFLAGS_LDFLAGS=${{ needs.prepare-build-metadata.outputs.ldflags }}"
+      evaluated-envs: "VERSION:${{ needs.prepare-build-metadata.outputs.version }}, COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
 
   slsa-build-linux-arm64:
@@ -457,7 +460,7 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/linux-arm64.yml
-      evaluated-envs: "GOFLAGS_LDFLAGS=${{ needs.prepare-build-metadata.outputs.ldflags }}"
+      evaluated-envs: "VERSION:${{ needs.prepare-build-metadata.outputs.version }}, COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
 
   slsa-build-darwin-amd64:
@@ -473,7 +476,7 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/darwin-amd64.yml
-      evaluated-envs: "GOFLAGS_LDFLAGS=${{ needs.prepare-build-metadata.outputs.ldflags }}"
+      evaluated-envs: "VERSION:${{ needs.prepare-build-metadata.outputs.version }}, COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
 
   slsa-build-darwin-arm64:
@@ -489,7 +492,7 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/darwin-arm64.yml
-      evaluated-envs: "GOFLAGS_LDFLAGS=${{ needs.prepare-build-metadata.outputs.ldflags }}"
+      evaluated-envs: "VERSION:${{ needs.prepare-build-metadata.outputs.version }}, COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
 
   slsa-build-windows-amd64:
@@ -505,7 +508,7 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/windows-amd64.yml
-      evaluated-envs: "GOFLAGS_LDFLAGS=${{ needs.prepare-build-metadata.outputs.ldflags }}"
+      evaluated-envs: "VERSION:${{ needs.prepare-build-metadata.outputs.version }}, COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
 
   slsa-build-windows-arm64:
@@ -521,5 +524,5 @@ jobs:
     with:
       go-version: "1.24"
       config-file: .slsa-goreleaser/windows-arm64.yml
-      evaluated-envs: "GOFLAGS_LDFLAGS=${{ needs.prepare-build-metadata.outputs.ldflags }}"
+      evaluated-envs: "VERSION:${{ needs.prepare-build-metadata.outputs.version }}, COMMIT:${{ needs.prepare-build-metadata.outputs.commit }}, BUILD_DATE:${{ needs.prepare-build-metadata.outputs.build_date }}"
       upload-assets: true
