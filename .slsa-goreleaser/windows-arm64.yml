@@ -1,0 +1,19 @@
+version: 1
+
+env:
+  - GO111MODULE=on
+  - CGO_ENABLED=0
+
+flags:
+  - -trimpath
+  - -tags=netgo
+
+goos: windows
+goarch: arm64
+
+binary: politest-{{ .Os }}-{{ .Arch }}
+
+ldflags:
+  - "-X 'main.version={{ .Env.VERSION }}'"
+  - "-X 'main.gitCommit={{ .Env.COMMIT }}'"
+  - "-X 'main.buildDate={{ .Env.BUILD_DATE }}'"
