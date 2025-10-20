@@ -29,14 +29,16 @@ cd test && bash run-tests.sh
 
 1. **Scenarios** (`Scenario` struct in main.go:24-45)
    - YAML files defining policy tests in two formats:
-     - **Legacy format**: Uses `actions`, `resources`, and `expect` map
-     - **Collection format**: Uses `tests` array with named test cases
+     - **Legacy format**: Uses `actions` (array), `resources` (array), and `expect` map
+     - **Collection format**: Uses `tests` array with `action` (single) or `actions` (array) per test
    - Support `extends:` for inheritance (recursive merging)
-   - Can reference `policy_template` (Go template) or `policy_json` (pre-rendered)
+   - Can reference `policy_template` (for policies with variables) or `policy_json` (for pre-rendered policies)
    - Both formats support template variables and SCP/RCP merging
 
 2. **Variable Templating**
-   - Go `text/template` for all fields: policies, actions, resources, context values
+   - Supports multiple formats: `{{.VAR}}`, `${VAR}`, `$VAR`, `<VAR>`
+   - All formats converted to Go `text/template` internally via preprocessing
+   - Variables work in all fields: policies, actions, resources, context values
    - Variables sourced from `vars_file` (YAML) or inline `vars` map
    - Child scenarios override parent variables
 
@@ -278,14 +280,56 @@ tests:
 ```
 
 **Supported context types:**
-- `string` - Single string value
-- `stringList` - Multiple string values
-- `numeric` - Numeric value
-- `numericList` - Multiple numeric values
-- `boolean` - Boolean value (true/false)
-- `booleanList` - Multiple boolean values
+
+- `string`
+  - Single string value
+
+- `stringList`
+  - Multiple string values
+
+- `numeric`
+  - Numeric value
+
+- `numericList`
+  - Multiple numeric values
+
+- `boolean`
+  - Boolean value (true/false)
+
+- `booleanList`
+  - Multiple boolean values
 
 **Note:** AWS SimulateCustomPolicy has limitations in condition evaluation. Some complex conditions may not evaluate as expected in simulation.
+
+### Policy Fields: policy_template vs policy_json
+
+**policy_template:**
+- Use for policies containing template variables
+- Supports all variable formats: `{{.VAR}}`, `${VAR}`, `$VAR`, `<VAR>`
+- Variables are substituted before policy evaluation
+- Example: `policy_template: "../policies/policy.json.tpl"`
+
+**policy_json:**
+- Use for policies with no variables
+- Policy is used as-is without template rendering
+- Faster for policies that don't need variable substitution
+- Example: `policy_json: "../policies/static-policy.json"`
+
+**Note:** These fields are mutually exclusive - use one or the other, not both.
+
+### Actions and Resources: Single vs Array
+
+**In Legacy Format (scenario-level):**
+- `actions: ["s3:GetObject", "s3:PutObject"]` - Required array
+- `resources: ["arn:aws:s3:::bucket/*"]` - Optional array
+
+**In Collection Format (test-level):**
+- `action: "s3:GetObject"` - Single action per test
+- `actions: ["s3:GetObject", "s3:PutObject"]` - Or array to test multiple actions
+- `resource: "arn:aws:s3:::bucket/*"` - Single resource per test
+- `resources: ["arn:aws:s3:::bucket1/*", "arn:aws:s3:::bucket2/*"]` - Or array for multiple resources
+
+Collection format is more flexible - it expands arrays into individual test executions and provides better test names/output.
 
 ### Resource Policies and Cross-Account Testing
 

@@ -33,15 +33,27 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
 
 - **YAML-based scenarios**
   - Inheritance via `extends:`
-- **Go template support**
-  - Dynamic values (`{{ .variable }}`)
+
+- **Multiple variable formats**
+  - `{{.VAR}}`, `${VAR}`, `$VAR`, `<VAR>` syntax support
+
 - **Policy templates**
-  - Or pre-rendered JSON policies
-- **SCP merging**
+  - Use `policy_template` for policies with variables
+  - Or `policy_json` for pre-rendered JSON policies
+
+- **Flexible test formats**
+  - Legacy format: `actions` + `resources` arrays
+  - Collection format: `tests` array with named test cases
+
+- **SCP/RCP merging**
   - From multiple files/globs into permissions boundaries
+
 - **AWS IAM SimulateCustomPolicy integration**
+  - Test policies before deployment
+
 - **Expectation assertions**
   - For CI/CD integration
+
 - **Clean table output**
   - With optional raw JSON export
 
@@ -219,30 +231,58 @@ Flags:
 
 ### Required Fields
 
-- **One of:**
-  - `policy_template`
-    - Path to a Go template file that renders to JSON
-  - `policy_json`
-    - Path to a pre-rendered JSON policy file
-- `actions`
-  - List of IAM actions to test (can use templates)
+**Policy** - One of:
+
+- `policy_template: "path/to/policy.json.tpl"`
+  - Path to a policy file with template variables
+  - Supports `{{.VAR}}`, `${VAR}`, `$VAR`, and `<VAR>` variable formats
+  - Variables are substituted before policy is used
+- `policy_json: "path/to/policy.json"`
+  - Path to a plain JSON policy file
+  - Use when policy has no variables or is already rendered
+
+**Tests** - One of two formats:
+
+Legacy format (backward compatible):
+- `actions: ["action1", "action2"]`
+  - Array of IAM actions to test
+- `resources: ["arn:..."]`
+  - Array of resource ARNs to test
+- `expect: {"action": "allowed"}`
+  - Map of action → expected decision
+
+Collection format (recommended):
+- `tests: [{action, resource, expect}]`
+  - Array of test cases with individual settings
+  - See examples below for detailed syntax
 
 ### Optional Fields
 
-- `extends`
+- `extends: "parent.yml"`
   - Path to parent scenario (supports inheritance)
-- `vars_file`
+- `vars_file: "vars.yml"`
   - Path to YAML file with variables
-- `vars`
+- `vars: {key: value}`
   - Inline variables (overrides vars_file)
-- `scp_paths`
+- `scp_paths: ["scp/*.json"]`
   - List of SCP file paths or globs to merge
-- `resources`
-  - List of resource ARNs (can use templates)
-- `context`
+- `context: [{ContextKeyName, ContextKeyValues, ContextKeyType}]`
   - List of context entries for conditions
-- `expect`
-  - Map of action → expected decision ("allowed" or "denied")
+
+### Action and Resource Fields
+
+**Single vs Array:**
+
+- `action: "s3:GetObject"`
+  - Single action (used in collection format)
+- `actions: ["s3:GetObject", "s3:PutObject"]`
+  - Multiple actions (used in legacy format)
+- `resource: "arn:aws:s3:::bucket/*"`
+  - Single resource (used in collection format)
+- `resources: ["arn:aws:s3:::bucket1/*", "arn:aws:s3:::bucket2/*"]`
+  - Multiple resources (used in legacy format)
+
+**Note:** Collection format supports both singular and plural forms in individual tests for flexibility.
 
 ### Inheritance with `extends:`
 
@@ -263,7 +303,30 @@ Variables can be defined in three places (priority order):
 2. **External `vars_file:` YAML**
 3. **Inherited from parent via `extends:`**
 
-Use Go template syntax: `{{ .variable_name }}`
+**Variable Formats:**
+
+politest supports multiple variable syntax formats for flexibility:
+
+- `{{.variable_name}}`
+  - Go template syntax (original format)
+- `${VARIABLE_NAME}`
+  - Shell/environment variable style with braces
+- `$VARIABLE_NAME`
+  - Environment variable style without braces
+- `<VARIABLE_NAME>`
+  - Custom angle bracket style
+
+All formats are converted to Go templates internally, so you can mix and match in the same file:
+
+```yaml
+vars:
+  account_id: "123456789012"
+  ACCOUNT_ID: "123456789012"  # Can use different case for different formats
+
+policy_template: "policy.json"  # Contains ${ACCOUNT_ID} and <ACCOUNT_ID>
+resources:
+  - "arn:aws:iam::{{.account_id}}:role/MyRole"  # Go template syntax
+```
 
 ### Context Entries
 
@@ -278,14 +341,19 @@ context:
 
 - `string`
   - Single string value
+
 - `stringList`
   - List of strings
+
 - `numeric`
   - Single numeric value
+
 - `numericList`
   - List of numeric values
+
 - `boolean`
   - Single boolean value
+
 - `booleanList`
   - List of boolean values
 
