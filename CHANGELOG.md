@@ -1,3 +1,9 @@
+## [2.1.6](https://github.com/reaandrew/politest/compare/v2.1.5...v2.1.6) (2025-10-20)
+
+### Bug Fixes
+
+* use equals sign for environment variable assignment in evaluated-envs ([515c089](https://github.com/reaandrew/politest/commit/515c089a907e2cc3a402c286cdb7e34ba861f095))
+
 ## [2.1.5](https://github.com/reaandrew/politest/compare/v2.1.4...v2.1.5) (2025-10-20)
 
 ### Bug Fixes
