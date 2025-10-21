@@ -248,7 +248,11 @@ func evaluateTestResult(resp *iam.SimulateCustomPolicyOutput, test TestCase, act
 	}
 
 	if strings.EqualFold(decision, test.Expect) {
-		fmt.Printf("  ✓ PASS: %s (matched: %s)\n\n", decision, detail)
+		fmt.Printf("  ✓ PASS: %s (matched: %s)\n", decision, detail)
+		if cfg.ShowMatchedSuccess {
+			displayMatchedStatements(result.MatchedStatements, cfg)
+		}
+		fmt.Println()
 		return true
 	}
 

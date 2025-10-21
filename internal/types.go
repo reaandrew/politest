@@ -49,6 +49,7 @@ type SimulatorConfig struct {
 	Variables           map[string]any
 	SavePath            string
 	NoAssert            bool
+	ShowMatchedSuccess  bool             // Show matched statements for passing tests
 	SourceMap           *PolicySourceMap // Tracks where statements came from
 }
 

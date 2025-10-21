@@ -230,7 +230,7 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 }
 
 // run contains the main application logic and returns an error instead of calling Die()
-func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWriter io.Writer) error {
+func run(scenarioPath, savePath string, noAssert, noWarn, debug, showMatchedSuccess bool, debugWriter io.Writer) error {
 	// Prepare simulation data (AWS-free)
 	prep, err := prepareSimulation(scenarioPath, noWarn, debug, debugWriter)
 	if err != nil {
@@ -253,6 +253,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 		Variables:           prep.variables,
 		SavePath:            savePath,
 		NoAssert:            noAssert,
+		ShowMatchedSuccess:  showMatchedSuccess,
 		SourceMap:           prep.sourceMap,
 	}
 
@@ -263,12 +264,13 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 
 // cliFlags holds the parsed command-line flags
 type cliFlags struct {
-	scenarioPath string
-	savePath     string
-	noAssert     bool
-	noWarn       bool
-	showVersion  bool
-	debug        bool
+	scenarioPath       string
+	savePath           string
+	noAssert           bool
+	noWarn             bool
+	showVersion        bool
+	debug              bool
+	showMatchedSuccess bool
 }
 
 // parseFlags parses command-line arguments and returns flags or error
@@ -282,6 +284,7 @@ func parseFlags(args []string) (*cliFlags, []string, error) {
 	fs.BoolVar(&flags.noAssert, "no-assert", false, "Do not fail on expectation mismatches")
 	fs.BoolVar(&flags.noWarn, "no-warn", false, "Suppress SCP/RCP simulation approximation warning")
 	fs.BoolVar(&flags.debug, "debug", false, "Show debug output (files loaded, variables, rendered policies)")
+	fs.BoolVar(&flags.showMatchedSuccess, "show-matched-success", false, "Show matched statements for passing tests")
 	fs.BoolVar(&flags.showVersion, "version", false, "Show version information and exit")
 
 	if err := fs.Parse(args); err != nil {
@@ -324,7 +327,7 @@ func realMain(args []string) int {
 	}
 
 	// Run main logic
-	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn, flags.debug, os.Stdout); err != nil {
+	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn, flags.debug, flags.showMatchedSuccess, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}

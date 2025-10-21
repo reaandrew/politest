@@ -283,25 +283,27 @@ tests: []
 
 func TestParseFlags(t *testing.T) {
 	tests := []struct {
-		name         string
-		args         []string
-		wantScenario string
-		wantSave     string
-		wantNoAssert bool
-		wantNoWarn   bool
-		wantVersion  bool
-		wantDebug    bool
-		wantErr      bool
+		name                   string
+		args                   []string
+		wantScenario           string
+		wantSave               string
+		wantNoAssert           bool
+		wantNoWarn             bool
+		wantVersion            bool
+		wantDebug              bool
+		wantShowMatchedSuccess bool
+		wantErr                bool
 	}{
 		{
-			name:         "all flags",
-			args:         []string{"--scenario", "test.yml", "--save", "out.json", "--no-assert", "--no-warn", "--version", "--debug"},
-			wantScenario: "test.yml",
-			wantSave:     "out.json",
-			wantNoAssert: true,
-			wantNoWarn:   true,
-			wantVersion:  true,
-			wantDebug:    true,
+			name:                   "all flags",
+			args:                   []string{"--scenario", "test.yml", "--save", "out.json", "--no-assert", "--no-warn", "--version", "--debug", "--show-matched-success"},
+			wantScenario:           "test.yml",
+			wantSave:               "out.json",
+			wantNoAssert:           true,
+			wantNoWarn:             true,
+			wantVersion:            true,
+			wantDebug:              true,
+			wantShowMatchedSuccess: true,
 		},
 		{
 			name:         "only scenario",
@@ -328,6 +330,17 @@ func TestParseFlags(t *testing.T) {
 			name:      "debug without scenario",
 			args:      []string{"--debug"},
 			wantDebug: true,
+		},
+		{
+			name:                   "show-matched-success flag",
+			args:                   []string{"--scenario", "test.yml", "--show-matched-success"},
+			wantScenario:           "test.yml",
+			wantShowMatchedSuccess: true,
+		},
+		{
+			name:                   "show-matched-success without scenario",
+			args:                   []string{"--show-matched-success"},
+			wantShowMatchedSuccess: true,
 		},
 	}
 
@@ -359,6 +372,9 @@ func TestParseFlags(t *testing.T) {
 			}
 			if flags.debug != tt.wantDebug {
 				t.Errorf("debug = %v, want %v", flags.debug, tt.wantDebug)
+			}
+			if flags.showMatchedSuccess != tt.wantShowMatchedSuccess {
+				t.Errorf("showMatchedSuccess = %v, want %v", flags.showMatchedSuccess, tt.wantShowMatchedSuccess)
 			}
 		})
 	}
