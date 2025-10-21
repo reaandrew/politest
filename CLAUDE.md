@@ -130,6 +130,7 @@ Test scenarios cover:
 5. **14-16**: Variable templating - vars_file, extends:, variable overrides
 6. **17**: RCP support
 7. **18**: Comprehensive - All features combined (inheritance, templates, resource policies, SCPs, cross-account)
+8. **19**: Context key override - Test-level context overrides scenario-level context by key name
 
 ### Unit Tests
 
@@ -289,6 +290,46 @@ tests:
   - Multiple boolean values
 
 **Note:** AWS SimulateCustomPolicy has limitations in condition evaluation. Some complex conditions may not evaluate as expected in simulation.
+
+**Context Override Behavior:**
+
+Test-level context entries override scenario-level entries when they share the same `ContextKeyName`:
+
+```yaml
+# Scenario-level context (default)
+context:
+  - ContextKeyName: "aws:SourceIp"
+    ContextKeyType: "string"
+    ContextKeyValues: ["10.0.1.0/24"]
+
+tests:
+  - name: "Uses scenario context"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    # No test-level context = uses scenario IP
+    expect: "allowed"
+
+  - name: "Overrides scenario IP"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    context:
+      - ContextKeyName: "aws:SourceIp"  # OVERRIDES scenario value
+        ContextKeyType: "string"
+        ContextKeyValues: ["192.168.1.1"]
+    expect: "implicitDeny"
+
+  - name: "Adds MFA, keeps scenario IP"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::bucket/*"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"  # ADDS new key
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+    # Both aws:SourceIp (from scenario) and aws:MultiFactorAuthPresent (from test) are sent
+    expect: "allowed"
+```
+
+Implementation: The `mergeContextEntries()` function in `internal/simulator.go` builds a map of test-level context keys and excludes scenario-level entries with matching `ContextKeyName` values before merging.
 
 ### Policy Fields: policy_template vs policy_json
 
