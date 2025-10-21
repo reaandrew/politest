@@ -576,3 +576,306 @@ func TestFindStatementLineNumbersNoMatch(t *testing.T) {
 		t.Errorf("Expected (0, 0) for no match, got (%d, %d)", startLine, endLine)
 	}
 }
+
+func TestStripNonIAMFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		checkFor []string // Fields that should NOT be in output
+	}{
+		{
+			name: "strip top-level custom field",
+			input: `{
+				"Version": "2012-10-17",
+				"CustomField": "should be removed",
+				"Statement": [
+					{"Effect": "Allow", "Action": "s3:*", "Resource": "*"}
+				]
+			}`,
+			checkFor: []string{"CustomField"},
+		},
+		{
+			name: "strip statement-level custom field",
+			input: `{
+				"Version": "2012-10-17",
+				"Statement": [
+					{
+						"Effect": "Allow",
+						"Action": "s3:*",
+						"Resource": "*",
+						"Comment": "this should be removed"
+					}
+				]
+			}`,
+			checkFor: []string{"Comment"},
+		},
+		{
+			name: "strip multiple custom fields",
+			input: `{
+				"Version": "2012-10-17",
+				"CustomTop": "remove",
+				"AnotherCustom": "remove",
+				"Statement": [
+					{
+						"Effect": "Allow",
+						"Action": "s3:*",
+						"Resource": "*",
+						"Note": "remove",
+						"Description": "remove"
+					}
+				]
+			}`,
+			checkFor: []string{"CustomTop", "AnotherCustom", "Note", "Description"},
+		},
+		{
+			name: "preserve all valid IAM fields",
+			input: `{
+				"Version": "2012-10-17",
+				"Id": "policy-id",
+				"Statement": [
+					{
+						"Sid": "stmt1",
+						"Effect": "Allow",
+						"Principal": {"AWS": "*"},
+						"NotPrincipal": {"AWS": "arn:aws:iam::123456789012:user/test"},
+						"Action": "s3:GetObject",
+						"NotAction": "s3:DeleteObject",
+						"Resource": "arn:aws:s3:::bucket/*",
+						"NotResource": "arn:aws:s3:::bucket/private/*",
+						"Condition": {
+							"StringEquals": {
+								"aws:username": "test"
+							}
+						}
+					}
+				]
+			}`,
+			checkFor: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := StripNonIAMFields(tt.input)
+
+			// Verify result is valid JSON
+			var parsed map[string]any
+			if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+				t.Errorf("StripNonIAMFields() produced invalid JSON: %v", err)
+			}
+
+			// Check that custom fields were removed
+			for _, field := range tt.checkFor {
+				if _, exists := parsed[field]; exists {
+					t.Errorf("StripNonIAMFields() did not remove top-level field: %s", field)
+				}
+
+				// Check statement-level fields
+				if statements, ok := parsed["Statement"].([]any); ok {
+					for i, stmt := range statements {
+						if stmtMap, ok := stmt.(map[string]any); ok {
+							if _, exists := stmtMap[field]; exists {
+								t.Errorf("StripNonIAMFields() did not remove field %s from statement %d", field, i)
+							}
+						}
+					}
+				}
+			}
+
+			// Verify required fields are preserved
+			if _, exists := parsed["Version"]; !exists {
+				t.Error("StripNonIAMFields() removed required Version field")
+			}
+			if _, exists := parsed["Statement"]; !exists {
+				t.Error("StripNonIAMFields() removed required Statement field")
+			}
+		})
+	}
+}
+
+func TestValidateIAMFields(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+		errText string // Text that should appear in error
+	}{
+		{
+			name: "valid policy - no errors",
+			input: `{
+				"Version": "2012-10-17",
+				"Statement": [
+					{"Effect": "Allow", "Action": "s3:*", "Resource": "*"}
+				]
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "valid policy with all fields",
+			input: `{
+				"Version": "2012-10-17",
+				"Id": "policy-id",
+				"Statement": [
+					{
+						"Sid": "stmt1",
+						"Effect": "Allow",
+						"Principal": {"AWS": "*"},
+						"Action": "s3:*",
+						"Resource": "*",
+						"Condition": {"StringEquals": {"aws:username": "test"}}
+					}
+				]
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "invalid top-level field",
+			input: `{
+				"Version": "2012-10-17",
+				"CustomField": "not allowed",
+				"Statement": [
+					{"Effect": "Allow", "Action": "s3:*", "Resource": "*"}
+				]
+			}`,
+			wantErr: true,
+			errText: "CustomField",
+		},
+		{
+			name: "invalid statement field",
+			input: `{
+				"Version": "2012-10-17",
+				"Statement": [
+					{
+						"Effect": "Allow",
+						"Action": "s3:*",
+						"Resource": "*",
+						"Comment": "not allowed in IAM schema"
+					}
+				]
+			}`,
+			wantErr: true,
+			errText: "Comment",
+		},
+		{
+			name: "multiple invalid fields",
+			input: `{
+				"Version": "2012-10-17",
+				"Custom1": "invalid",
+				"Custom2": "invalid",
+				"Statement": [
+					{
+						"Effect": "Allow",
+						"Action": "s3:*",
+						"Resource": "*",
+						"Note": "invalid",
+						"Description": "invalid"
+					}
+				]
+			}`,
+			wantErr: true,
+			errText: "non-IAM fields",
+		},
+		{
+			name:    "invalid JSON",
+			input:   `{not valid json}`,
+			wantErr: true,
+			errText: "invalid JSON",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateIAMFields(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateIAMFields() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if err != nil && tt.errText != "" {
+				errMsg := err.Error()
+				if len(errMsg) == 0 || !containsSubstring(errMsg, tt.errText) {
+					t.Errorf("ValidateIAMFields() error message should contain %q, got: %v", tt.errText, err)
+				}
+			}
+		})
+	}
+}
+
+// containsSubstring is a helper function for error message checking
+func containsSubstring(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || findSubstring(s, substr))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func TestStripNonIAMFieldsPreservesStructure(t *testing.T) {
+	input := `{
+		"Version": "2012-10-17",
+		"Id": "my-policy-id",
+		"Statement": [
+			{
+				"Sid": "AllowS3Read",
+				"Effect": "Allow",
+				"Principal": {"AWS": "arn:aws:iam::123456789012:root"},
+				"Action": ["s3:GetObject", "s3:ListBucket"],
+				"Resource": [
+					"arn:aws:s3:::mybucket/*",
+					"arn:aws:s3:::mybucket"
+				],
+				"Condition": {
+					"StringEquals": {
+						"aws:SourceAccount": "123456789012"
+					}
+				}
+			}
+		]
+	}`
+
+	result := StripNonIAMFields(input)
+
+	// Verify structure is preserved
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("Result is not valid JSON: %v", err)
+	}
+
+	// Check all valid fields are present
+	if parsed["Version"] != "2012-10-17" {
+		t.Error("Version field not preserved")
+	}
+	if parsed["Id"] != "my-policy-id" {
+		t.Error("Id field not preserved")
+	}
+
+	statements, ok := parsed["Statement"].([]any)
+	if !ok || len(statements) != 1 {
+		t.Fatal("Statement array not preserved")
+	}
+
+	stmt := statements[0].(map[string]any)
+	if stmt["Sid"] != "AllowS3Read" {
+		t.Error("Sid not preserved")
+	}
+	if stmt["Effect"] != "Allow" {
+		t.Error("Effect not preserved")
+	}
+	if _, ok := stmt["Principal"]; !ok {
+		t.Error("Principal not preserved")
+	}
+	if _, ok := stmt["Action"]; !ok {
+		t.Error("Action not preserved")
+	}
+	if _, ok := stmt["Resource"]; !ok {
+		t.Error("Resource not preserved")
+	}
+	if _, ok := stmt["Condition"]; !ok {
+		t.Error("Condition not preserved")
+	}
+}
