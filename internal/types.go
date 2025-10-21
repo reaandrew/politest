@@ -49,4 +49,22 @@ type SimulatorConfig struct {
 	Variables           map[string]any
 	SavePath            string
 	NoAssert            bool
+	SourceMap           *PolicySourceMap // Tracks where statements came from
+}
+
+// PolicySourceMap tracks the origin of policy statements
+type PolicySourceMap struct {
+	Identity               *PolicySource            // Identity policy source
+	PermissionsBoundary    map[string]*PolicySource // Map of Sid -> source for SCP/RCP statements
+	ResourcePolicy         *PolicySource            // Resource policy source (scenario-level)
+	PermissionsBoundaryRaw string                   // Raw merged JSON sent to AWS
+	IdentityPolicyRaw      string                   // Raw identity policy JSON sent to AWS
+	ResourcePolicyRaw      string                   // Raw resource policy JSON sent to AWS
+}
+
+// PolicySource tracks where a policy or statement originated
+type PolicySource struct {
+	FilePath string // Original file path
+	Sid      string // Statement ID
+	Index    int    // Statement index in original file
 }

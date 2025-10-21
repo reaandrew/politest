@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 )
 
 // ExpandGlobsRelative expands glob patterns relative to a base directory
@@ -36,32 +37,76 @@ func ExpandGlobsRelative(base string, patterns []string) []string {
 
 // MergeSCPFiles merges multiple SCP JSON files into a single policy document
 func MergeSCPFiles(files []string) map[string]any {
+	merged, _ := MergeSCPFilesWithSourceMap(files)
+	return merged
+}
+
+// MergeSCPFilesWithSourceMap merges multiple SCP JSON files and tracks statement origins
+func MergeSCPFilesWithSourceMap(files []string) (map[string]any, map[string]*PolicySource) {
 	statements := []any{}
+	sourceMap := make(map[string]*PolicySource)
+
 	for _, f := range files {
 		var doc any
 		Check(ReadJSONFile(f, &doc))
+
+		var stmtsToAdd []any
 		switch t := doc.(type) {
 		case map[string]any:
 			if st, ok := t["Statement"]; ok {
 				// Extract statements from policy document
 				if stmtArray, ok := st.([]any); ok {
-					statements = append(statements, stmtArray...)
+					stmtsToAdd = stmtArray
 				} else {
-					statements = append(statements, st)
+					stmtsToAdd = []any{st}
 				}
 			} else {
 				// assume it's a single statement object
-				statements = append(statements, t)
+				stmtsToAdd = []any{t}
 			}
 		default:
 			// treat as a statement-ish blob
-			statements = append(statements, t)
+			stmtsToAdd = []any{t}
+		}
+
+		// Inject unique Sid and track source for each statement
+		for idx, stmt := range stmtsToAdd {
+			if stmtMap, ok := stmt.(map[string]any); ok {
+				// Create unique Sid from file path and statement index
+				relPath := filepath.Base(f) // Use basename to keep Sids readable
+				sid := "scp:" + relPath + "#stmt:" + strconv.Itoa(idx)
+
+				// Store original Sid if it exists
+				originalSid := ""
+				if existingSid, ok := stmtMap["Sid"]; ok {
+					if sidStr, ok := existingSid.(string); ok {
+						originalSid = sidStr
+					}
+				}
+
+				// Inject our tracking Sid
+				stmtMap["Sid"] = sid
+
+				// Track source
+				sourceMap[sid] = &PolicySource{
+					FilePath: f,
+					Sid:      originalSid,
+					Index:    idx,
+				}
+
+				statements = append(statements, stmtMap)
+			} else {
+				statements = append(statements, stmt)
+			}
 		}
 	}
-	return map[string]any{
+
+	merged := map[string]any{
 		"Version":   "2012-10-17",
 		"Statement": statements,
 	}
+
+	return merged, sourceMap
 }
 
 // ReadJSONFile reads a JSON file and decodes it into v

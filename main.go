@@ -40,6 +40,7 @@ type simulationPrep struct {
 	resourcePolicyJSON  string
 	variables           map[string]any
 	absScenarioPath     string
+	sourceMap           *internal.PolicySourceMap
 }
 
 // prepareSimulation loads and prepares all data for simulation WITHOUT contacting AWS
@@ -125,8 +126,9 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered policy (minified):\n%s\n", policyJSON)
 	}
 
-	// Merge SCPs (permissions boundary)
+	// Merge SCPs (permissions boundary) with source tracking
 	var pbJSON string
+	var scpSourceMap map[string]*internal.PolicySource
 	if len(scen.SCPPaths) > 0 {
 		files := internal.ExpandGlobsRelative(filepath.Dir(absScenario), scen.SCPPaths)
 		if debug {
@@ -135,7 +137,8 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 				fmt.Fprintf(debugWriter, "  - %s\n", f)
 			}
 		}
-		merged := internal.MergeSCPFiles(files)
+		merged, sourceMap := internal.MergeSCPFilesWithSourceMap(files)
+		scpSourceMap = sourceMap
 		pbJSON = internal.ToJSONMin(merged)
 
 		// Warn that SCP simulation is an approximation (unless suppressed)
@@ -178,6 +181,47 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		return nil, fmt.Errorf("scenario must include 'tests' array with at least one test case")
 	}
 
+	// Build source map for tracking policy origins
+	if scpSourceMap == nil {
+		scpSourceMap = make(map[string]*internal.PolicySource)
+	}
+	sourceMap := &internal.PolicySourceMap{
+		PermissionsBoundary:    scpSourceMap,
+		PermissionsBoundaryRaw: pbJSON,
+		IdentityPolicyRaw:      policyJSON,
+		ResourcePolicyRaw:      resourcePolicyJSON,
+	}
+
+	// Track identity policy source if available
+	if scen.PolicyJSON != "" {
+		base := filepath.Dir(absScenario)
+		policyPath := internal.MustAbsJoin(base, scen.PolicyJSON)
+		sourceMap.Identity = &internal.PolicySource{
+			FilePath: policyPath,
+		}
+	} else if scen.PolicyTemplate != "" {
+		base := filepath.Dir(absScenario)
+		policyPath := internal.MustAbsJoin(base, scen.PolicyTemplate)
+		sourceMap.Identity = &internal.PolicySource{
+			FilePath: policyPath,
+		}
+	}
+
+	// Track resource policy source if available
+	if scen.ResourcePolicyJSON != "" {
+		base := filepath.Dir(absScenario)
+		policyPath := internal.MustAbsJoin(base, scen.ResourcePolicyJSON)
+		sourceMap.ResourcePolicy = &internal.PolicySource{
+			FilePath: policyPath,
+		}
+	} else if scen.ResourcePolicyTemplate != "" {
+		base := filepath.Dir(absScenario)
+		policyPath := internal.MustAbsJoin(base, scen.ResourcePolicyTemplate)
+		sourceMap.ResourcePolicy = &internal.PolicySource{
+			FilePath: policyPath,
+		}
+	}
+
 	return &simulationPrep{
 		scenario:            scen,
 		policyJSON:          policyJSON,
@@ -185,6 +229,7 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		resourcePolicyJSON:  resourcePolicyJSON,
 		variables:           allVars,
 		absScenarioPath:     absScenario,
+		sourceMap:           sourceMap,
 	}, nil
 }
 
@@ -212,6 +257,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 		Variables:           prep.variables,
 		SavePath:            savePath,
 		NoAssert:            noAssert,
+		SourceMap:           prep.sourceMap,
 	}
 
 	// Run tests
