@@ -67,6 +67,8 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
 
   - Use `policy_template` for policies with variables
   - Or `policy_json` for pre-rendered JSON policies
+  - Automatically strips non-IAM fields (metadata, comments)
+  - Optional --strict-policy flag enforces schema compliance
 
 - **Test collection format**
 
@@ -275,6 +277,7 @@ Flags:
   --no-warn                 Suppress SCP/RCP simulation approximation warning (optional)
   --test string             Comma-separated list of test names to run (runs all if empty)
   --show-matched-success    Show matched statement details for passing tests (optional)
+  --strict-policy           Fail if policies contain non-IAM schema fields (optional)
 ```
 
 ## Scenario Configuration
