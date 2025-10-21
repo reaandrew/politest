@@ -243,7 +243,11 @@ func resolveResourcePolicy(test TestCase, cfg SimulatorConfig, testIndex int) st
 		p := MustAbsJoin(base, test.ResourcePolicyJSON)
 		b, err := os.ReadFile(p)
 		Check(err)
-		testResourcePolicy = PrettyJSON(b)
+		var resourceData any
+		if err := json.Unmarshal(b, &resourceData); err != nil {
+			Die("invalid JSON in resource policy file %s: %v", p, err)
+		}
+		testResourcePolicy = ToJSONPretty(resourceData)
 	case test.ResourcePolicyTemplate != "":
 		base := filepath.Dir(cfg.ScenarioPath)
 		tplPath := MustAbsJoin(base, test.ResourcePolicyTemplate)

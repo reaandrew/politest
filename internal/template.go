@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,7 +52,11 @@ func RenderTemplateFileJSON(path string, vars map[string]any) string {
 	var buf bytes.Buffer
 	Check(tpl.Execute(&buf, vars))
 	// Validate and format JSON
-	return PrettyJSON(buf.Bytes())
+	var jsonData any
+	if err := json.Unmarshal(buf.Bytes(), &jsonData); err != nil {
+		Die("invalid JSON in template %s: %v", path, err)
+	}
+	return ToJSONPretty(jsonData)
 }
 
 // RenderTemplateString renders a template string with the given variables

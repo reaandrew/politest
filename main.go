@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -112,7 +113,11 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		if err != nil {
 			return nil, err
 		}
-		policyJSON = internal.PrettyJSON(b)
+		var policyData any
+		if err := json.Unmarshal(b, &policyData); err != nil {
+			return nil, fmt.Errorf("invalid JSON in policy file %s: %v", p, err)
+		}
+		policyJSON = internal.ToJSONPretty(policyData)
 	case scen.PolicyTemplate != "":
 		base := filepath.Dir(absScenario)
 		tplPath := internal.MustAbsJoin(base, scen.PolicyTemplate)
@@ -170,7 +175,11 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		if err != nil {
 			return nil, err
 		}
-		resourcePolicyJSON = internal.PrettyJSON(b)
+		var resourcePolicyData any
+		if err := json.Unmarshal(b, &resourcePolicyData); err != nil {
+			return nil, fmt.Errorf("invalid JSON in resource policy file %s: %v", p, err)
+		}
+		resourcePolicyJSON = internal.ToJSONPretty(resourcePolicyData)
 	case scen.ResourcePolicyTemplate != "":
 		base := filepath.Dir(absScenario)
 		tplPath := internal.MustAbsJoin(base, scen.ResourcePolicyTemplate)
