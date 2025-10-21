@@ -1296,3 +1296,307 @@ func TestExtractStatementFromPolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestPrintTestFailureWithSingleResource(t *testing.T) {
+	// Capture stdout to verify output
+	test := TestCase{
+		Action:   "s3:GetObject",
+		Resource: "arn:aws:s3:::bucket/*",
+		Expect:   "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	// This will print to stdout - we're just verifying it doesn't crash
+	printTestFailure(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "explicitDeny", "policy1", []types.Statement{}, cfg)
+}
+
+func TestPrintTestFailureWithMultipleResources(t *testing.T) {
+	test := TestCase{
+		Action: "s3:ListBucket",
+		Resources: []string{
+			"arn:aws:s3:::bucket1",
+			"arn:aws:s3:::bucket2",
+			"arn:aws:s3:::bucket3",
+		},
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	printTestFailure(test, "s3:ListBucket", []string{"arn:aws:s3:::bucket1", "arn:aws:s3:::bucket2", "arn:aws:s3:::bucket3"}, "explicitDeny", "policy1", []types.Statement{}, cfg)
+}
+
+func TestPrintTestFailureWithContext(t *testing.T) {
+	test := TestCase{
+		Action:   "s3:PutObject",
+		Resource: "arn:aws:s3:::secure-bucket/*",
+		Context: []ContextEntryYml{
+			{ContextKeyName: "aws:SourceIp", ContextKeyValues: []string{"10.0.1.50"}},
+			{ContextKeyName: "aws:MultiFactorAuthPresent", ContextKeyValues: []string{"true"}},
+		},
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	printTestFailure(test, "s3:PutObject", []string{"arn:aws:s3:::secure-bucket/*"}, "explicitDeny", "policy1", []types.Statement{}, cfg)
+}
+
+func TestPrintTestFailureWithMultipleContextValues(t *testing.T) {
+	test := TestCase{
+		Action:   "s3:GetObject",
+		Resource: "arn:aws:s3:::bucket/*",
+		Context: []ContextEntryYml{
+			{ContextKeyName: "aws:PrincipalTag/Department", ContextKeyValues: []string{"Engineering", "Sales", "Marketing"}},
+		},
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	printTestFailure(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "implicitDeny", "policy1", []types.Statement{}, cfg)
+}
+
+func TestDisplayMatchedStatementsWithSourceMap(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a source file
+	scpFile := filepath.Join(tmpDir, "deny-s3.json")
+	scpContent := `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyS3",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": "*"
+    }
+  ]
+}`
+	if err := os.WriteFile(scpFile, []byte(scpContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build source map
+	sourceMap := &PolicySourceMap{
+		PermissionsBoundary: map[string]*PolicySource{
+			"scp:deny-s3.json#stmt:0": {
+				FilePath:  scpFile,
+				Sid:       "DenyS3",
+				Index:     0,
+				StartLine: 4,
+				EndLine:   9,
+			},
+		},
+		PermissionsBoundaryRaw: `{"Version":"2012-10-17","Statement":[{"Sid":"scp:deny-s3.json#stmt:0","Effect":"Deny","Action":"s3:*","Resource":"*"}]}`,
+	}
+
+	cfg := SimulatorConfig{
+		SourceMap: sourceMap,
+	}
+
+	sourcePolicyID := "PermissionsBoundaryPolicyInputList.1"
+	line4, col5 := int32(4), int32(5)
+	line9, col6 := int32(9), int32(6)
+
+	matchedStatements := []types.Statement{
+		{
+			SourcePolicyId: &sourcePolicyID,
+			StartPosition:  &types.Position{Line: line4, Column: col5},
+			EndPosition:    &types.Position{Line: line9, Column: col6},
+		},
+	}
+
+	// This will print to stdout - we're verifying it doesn't crash and exercises the code
+	displayMatchedStatements(matchedStatements, cfg)
+}
+
+func TestDisplaySingleStatementIdentityPolicy(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	policyFile := filepath.Join(tmpDir, "policy.json")
+	policyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowS3",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "*"
+    }
+  ]
+}`
+	if err := os.WriteFile(policyFile, []byte(policyContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	sourceMap := &PolicySourceMap{
+		Identity: &PolicySource{
+			FilePath:  policyFile,
+			Sid:       "AllowS3",
+			StartLine: 4,
+			EndLine:   9,
+		},
+		IdentityPolicyRaw: `{"Version":"2012-10-17","Statement":[{"Sid":"AllowS3","Effect":"Allow","Action":"s3:*","Resource":"*"}]}`,
+	}
+
+	cfg := SimulatorConfig{
+		SourceMap: sourceMap,
+	}
+
+	sourcePolicyID := "PolicyInputList.1"
+	stmt := types.Statement{
+		SourcePolicyId: &sourcePolicyID,
+	}
+
+	displaySingleStatement(stmt, cfg)
+}
+
+func TestDisplaySingleStatementResourcePolicy(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	policyFile := filepath.Join(tmpDir, "resource-policy.json")
+	policyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyDelete",
+      "Effect": "Deny",
+      "Principal": {"AWS": "*"},
+      "Action": "s3:DeleteObject",
+      "Resource": "*"
+    }
+  ]
+}`
+	if err := os.WriteFile(policyFile, []byte(policyContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	sourceMap := &PolicySourceMap{
+		ResourcePolicy: &PolicySource{
+			FilePath:  policyFile,
+			Sid:       "DenyDelete",
+			StartLine: 4,
+			EndLine:   10,
+		},
+		ResourcePolicyRaw: `{"Version":"2012-10-17","Statement":[{"Sid":"DenyDelete","Effect":"Deny","Principal":{"AWS":"*"},"Action":"s3:DeleteObject","Resource":"*"}]}`,
+	}
+
+	cfg := SimulatorConfig{
+		SourceMap: sourceMap,
+	}
+
+	sourcePolicyID := "ResourcePolicy.1"
+	stmt := types.Statement{
+		SourcePolicyId: &sourcePolicyID,
+	}
+
+	displaySingleStatement(stmt, cfg)
+}
+
+func TestDisplaySingleStatementUnknownSource(t *testing.T) {
+	cfg := SimulatorConfig{
+		SourceMap: &PolicySourceMap{},
+	}
+
+	sourcePolicyID := "UnknownPolicyType.1"
+	stmt := types.Statement{
+		SourcePolicyId: &sourcePolicyID,
+	}
+
+	displaySingleStatement(stmt, cfg)
+}
+
+func TestDisplaySingleStatementNilSourcePolicyId(t *testing.T) {
+	cfg := SimulatorConfig{
+		SourceMap: &PolicySourceMap{},
+	}
+
+	stmt := types.Statement{
+		SourcePolicyId: nil,
+	}
+
+	// Should return early without printing
+	displaySingleStatement(stmt, cfg)
+}
+
+func TestDisplayStatementWithContextValidSource(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	sourceFile := filepath.Join(tmpDir, "test-policy.json")
+	sourceContent := `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "TestStatement",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "*"
+    }
+  ]
+}`
+	if err := os.WriteFile(sourceFile, []byte(sourceContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	source := &PolicySource{
+		FilePath:  sourceFile,
+		Sid:       "TestStatement",
+		StartLine: 4,
+		EndLine:   9,
+	}
+
+	displayStatementWithContext(source)
+}
+
+func TestDisplayStatementWithContextNoLineNumbers(t *testing.T) {
+	source := &PolicySource{
+		FilePath:  "/some/path",
+		Sid:       "TestSid",
+		StartLine: 0,
+		EndLine:   0,
+	}
+
+	// Should return early without trying to read file
+	displayStatementWithContext(source)
+}
+
+func TestDisplayStatementWithContextFileReadError(t *testing.T) {
+	source := &PolicySource{
+		FilePath:  "/nonexistent/path/file.json",
+		Sid:       "TestSid",
+		StartLine: 1,
+		EndLine:   5,
+	}
+
+	// Should return early on file read error
+	displayStatementWithContext(source)
+}
+
+func TestDisplayMatchedStatementsNoSourceMap(t *testing.T) {
+	cfg := SimulatorConfig{
+		SourceMap: nil,
+	}
+
+	sourcePolicyID := "PolicyInputList.1"
+	matchedStatements := []types.Statement{
+		{
+			SourcePolicyId: &sourcePolicyID,
+		},
+	}
+
+	// Should return early without source map
+	displayMatchedStatements(matchedStatements, cfg)
+}
+
+func TestDisplayMatchedStatementsEmpty(t *testing.T) {
+	cfg := SimulatorConfig{
+		SourceMap: &PolicySourceMap{},
+	}
+
+	matchedStatements := []types.Statement{}
+
+	// Should return early with empty statements
+	displayMatchedStatements(matchedStatements, cfg)
+}
