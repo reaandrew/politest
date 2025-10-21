@@ -56,29 +56,38 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
 ## Features
 
 - **YAML-based scenarios**
+
   - Inheritance via `extends:`
 
 - **Multiple variable formats**
+
   - `{{.VAR}}`, `${VAR}`, `$VAR`, `<VAR>` syntax support
 
 - **Policy templates**
+
   - Use `policy_template` for policies with variables
   - Or `policy_json` for pre-rendered JSON policies
 
 - **Test collection format**
+
   - `tests` array with named test cases
   - Test-level context keys override scenario-level values
+  - Filter specific tests with --test flag
 
 - **SCP/RCP merging**
+
   - From multiple files/globs into permissions boundaries
 
 - **AWS IAM SimulateCustomPolicy integration**
+
   - Test policies before deployment
 
 - **Expectation assertions**
+
   - For CI/CD integration
 
 - **Clean table output**
+
   - With optional raw JSON export
 
 - **Enhanced failure diagnostics**
@@ -95,27 +104,33 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
 politest uses AWS's `SimulateCustomPolicy` API to evaluate policies **before deployment**. This provides:
 
 ✅ **Fast feedback loop**
-  - Test policy changes in seconds without deploying
+
+- Test policy changes in seconds without deploying
 
 ✅ **Blended testing**
-  - See how identity policies interact with SCPs/RCPs
+
+- See how identity policies interact with SCPs/RCPs
 
 ✅ **Fail fast**
-  - Catch obvious misconfigurations early in development
+
+- Catch obvious misconfigurations early in development
 
 ✅ **CI/CD integration**
-  - Automated policy validation on every commit
+
+- Automated policy validation on every commit
 
 ### Important Limitations
 
 ⚠️ **politest "bends the rules" for testing convenience:**
 
 - **SCPs/RCPs in SimulateCustomPolicy**
+
   - The API wasn't designed for testing organizational policies alongside identity policies
   - politest uses the `PermissionsBoundaryPolicyInputList` parameter to simulate SCP/RCP behavior
   - This **approximates** real-world behavior but may not be 100% accurate
 
 - **Simulation vs Reality**
+
   - `SimulateCustomPolicy` provides a **best-effort simulation**
   - Some complex conditions, resource policy interactions, and edge cases may behave differently in production
 
@@ -126,13 +141,16 @@ politest uses AWS's `SimulateCustomPolicy` API to evaluate policies **before dep
 ### What You Still Need
 
 ✅ **Integration testing in actual AWS accounts**
-  - Deploy policies to dev/staging and test real resource access
+
+- Deploy policies to dev/staging and test real resource access
 
 ✅ **Production validation**
-  - Verify permissions work as expected with real workloads
+
+- Verify permissions work as expected with real workloads
 
 ✅ **Security reviews**
-  - Have security teams review policies before production deployment
+
+- Have security teams review policies before production deployment
 
 **Remember:** politest helps you **fail faster during development** by catching obvious mistakes before deployment. Use it as **unit tests for IAM policies** - essential for development velocity, but always validate with real integration tests in actual AWS environments.
 
@@ -204,10 +222,7 @@ tests:
     {
       "Sid": "AthenaAccess",
       "Effect": "Allow",
-      "Action": [
-        "athena:BatchGetNamedQuery",
-        "athena:GetQueryExecution"
-      ],
+      "Action": ["athena:BatchGetNamedQuery", "athena:GetQueryExecution"],
       "Resource": "arn:aws:athena:{{ .region }}:{{ .account_id }}:workgroup/{{ .workgroup }}",
       "Condition": {
         "StringEquals": {
@@ -257,6 +272,7 @@ Flags:
   --save string             Path to save raw JSON response (optional)
   --no-assert               Do not fail on expectation mismatches (optional)
   --no-warn                 Suppress SCP/RCP simulation approximation warning (optional)
+  --test string             Comma-separated list of test names to run (runs all if empty)
   --show-matched-success    Show matched statement details for passing tests (optional)
 ```
 
@@ -349,11 +365,11 @@ All formats are converted to Go templates internally, so you can mix and match i
 ```yaml
 vars:
   account_id: "123456789012"
-  ACCOUNT_ID: "123456789012"  # Can use different case for different formats
+  ACCOUNT_ID: "123456789012" # Can use different case for different formats
 
-policy_template: "policy.json"  # Contains ${ACCOUNT_ID} and <ACCOUNT_ID>
+policy_template: "policy.json" # Contains ${ACCOUNT_ID} and <ACCOUNT_ID>
 resources:
-  - "arn:aws:iam::{{.account_id}}:role/MyRole"  # Go template syntax
+  - "arn:aws:iam::{{.account_id}}:role/MyRole" # Go template syntax
 ```
 
 ### Context Entries
@@ -362,24 +378,29 @@ resources:
 context:
   - ContextKeyName: "aws:RequestedRegion"
     ContextKeyValues: ["us-east-1", "eu-west-1"]
-    ContextKeyType: "stringList"  # string, stringList, numeric, numericList, boolean, booleanList
+    ContextKeyType: "stringList" # string, stringList, numeric, numericList, boolean, booleanList
 ```
 
 **Supported Context Types:**
 
 - `string`
+
   - Single string value
 
 - `stringList`
+
   - List of strings
 
 - `numeric`
+
   - Single numeric value
 
 - `numericList`
+
   - List of numeric values
 
 - `boolean`
+
   - Single boolean value
 
 - `booleanList`
@@ -412,7 +433,7 @@ tests:
     action: "s3:GetObject"
     resource: "arn:aws:s3:::bucket/*"
     context:
-      - ContextKeyName: "aws:SourceIp"  # OVERRIDES scenario IP
+      - ContextKeyName: "aws:SourceIp" # OVERRIDES scenario IP
         ContextKeyType: "string"
         ContextKeyValues: ["192.168.1.1"]
     expect: "implicitDeny"
@@ -421,7 +442,7 @@ tests:
     action: "s3:DeleteObject"
     resource: "arn:aws:s3:::bucket/*"
     context:
-      - ContextKeyName: "aws:MultiFactorAuthPresent"  # ADDS MFA (keeps scenario IP)
+      - ContextKeyName: "aws:MultiFactorAuthPresent" # ADDS MFA (keeps scenario IP)
         ContextKeyType: "boolean"
         ContextKeyValues: ["true"]
     expect: "allowed"
@@ -434,7 +455,7 @@ Multiple SCP files are merged into a single permissions boundary:
 ```yaml
 scp_paths:
   - "../scp/010-base.json"
-  - "../scp/*.json"  # globs supported
+  - "../scp/*.json" # globs supported
   - "../scp/specific-restriction.json"
 ```
 
@@ -493,7 +514,7 @@ policy_template: "../policies/dynamodb.json.tmpl"
 
 tests:
   - name: "DynamoDB access"
-    actions:  # Using actions array - expands to multiple tests
+    actions: # Using actions array - expands to multiple tests
       - "dynamodb:GetItem"
       - "dynamodb:PutItem"
     resource: "arn:aws:dynamodb:{{ .region }}:{{ .account_id }}:table/{{ .table_name }}"
@@ -552,6 +573,7 @@ cd test && bash run-tests.sh
 ```
 
 Integration tests are located in the `test/` directory and cover:
+
 - Policy-only allow scenarios
 - Policy allows, SCP denies
 - Policy allows, RCP denies
@@ -580,6 +602,7 @@ lefthook install
 ### CI/CD
 
 The GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
+
 - Linting and testing
 - Dependency scanning (Trivy)
 - Secret detection (GitGuardian)
@@ -593,18 +616,23 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
 ## Tips
 
 1. **Organize scenarios**
+
    - Use `_common.yml` for shared config, extend in specific tests
 
 2. **Use templates**
+
    - Policy templates with variables make tests reusable across accounts/regions
 
 3. **CI Integration**
+
    - Use `expect:` assertions and check exit codes
 
 4. **Debug**
+
    - Use `--save` to inspect raw AWS responses and examine `MatchedStatements`
 
 5. **Glob SCPs**
+
    - Use wildcards to merge multiple SCP files automatically
 
 6. **Case-insensitive decisions**
