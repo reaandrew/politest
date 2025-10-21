@@ -1,0 +1,20 @@
+# Demo 1: Basic Allow
+# Demonstrates a simple policy that allows S3 read operations
+
+policy_json: "policies/s3-read-policy.json"
+
+tests:
+  - name: "GetObject is allowed"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::my-bucket/data.txt"
+    expect: "allowed"
+
+  - name: "ListBucket is allowed"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::my-bucket"
+    expect: "allowed"
+
+  - name: "PutObject is denied (not in policy)"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::my-bucket/data.txt"
+    expect: "implicitDeny"

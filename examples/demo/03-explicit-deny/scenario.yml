@@ -1,0 +1,25 @@
+# Demo 3: Explicit Deny
+# Demonstrates how explicit Deny statements always win
+
+policy_json: "policies/s3-with-deny.json"
+
+tests:
+  - name: "GetObject is allowed"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::my-bucket/data.txt"
+    expect: "allowed"
+
+  - name: "DeleteObject is explicitly denied"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::my-bucket/data.txt"
+    expect: "explicitDeny"
+
+  - name: "DeleteBucket is explicitly denied"
+    action: "s3:DeleteBucket"
+    resource: "arn:aws:s3:::my-bucket"
+    expect: "explicitDeny"
+
+  - name: "PutObject is implicitly denied (no statement)"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::my-bucket/data.txt"
+    expect: "implicitDeny"

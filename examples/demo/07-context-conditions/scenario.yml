@@ -1,0 +1,109 @@
+# Demo 7: Context Conditions
+# Demonstrates how IAM condition keys control access with both passing and failing tests
+
+policy_json: "policies/conditional-policy.json"
+
+tests:
+  # IP Address Condition Tests
+  - name: "GetObject from trusted IP (10.0.1.50)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::secure-bucket/data.txt"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["10.0.1.50"]
+    expect: "allowed"
+
+  - name: "GetObject from untrusted IP should fail"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::secure-bucket/data.txt"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["192.168.1.1"]
+    expect: "allowed"  # WRONG! Will actually be implicitDeny - shows failure output
+
+  # MFA Condition Tests
+  - name: "PutObject with MFA enabled"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::secure-bucket/upload.txt"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+    expect: "allowed"
+
+  - name: "PutObject without MFA should fail"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::secure-bucket/upload.txt"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["false"]
+    expect: "allowed"  # WRONG! Will actually be implicitDeny - shows failure output
+
+  # Principal Tag Condition Tests
+  - name: "StartInstances with Engineering tag"
+    action: "ec2:StartInstances"
+    resource: "*"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Engineering"]
+    expect: "allowed"
+
+  - name: "StartInstances with Finance tag should fail"
+    action: "ec2:StartInstances"
+    resource: "*"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Finance"]
+    expect: "allowed"  # WRONG! Will actually be implicitDeny - shows failure output
+
+  # Explicit Deny Tests - showcasing matched deny statements
+  - name: "DeleteObject from untrusted network should be explicitly denied"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::secure-bucket/sensitive.txt"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["192.168.1.100"]
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+    expect: "allowed"  # WRONG! Will be explicitDeny due to IP restriction
+
+  - name: "TerminateInstances without MFA should be explicitly denied"
+    action: "ec2:TerminateInstances"
+    resource: "*"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["false"]
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Engineering"]
+    expect: "allowed"  # WRONG! Will be explicitDeny due to missing MFA
+
+  - name: "DeleteBucket outside business hours"
+    action: "s3:DeleteBucket"
+    resource: "arn:aws:s3:::secure-bucket"
+    context:
+      - ContextKeyName: "aws:CurrentTime"
+        ContextKeyType: "string"
+        ContextKeyValues: ["2024-01-01T20:00:00Z"]
+    expect: "explicitDeny"
+
+  # Multiple Context Keys
+  - name: "ListBucket from trusted IP with MFA"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::secure-bucket"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["10.0.1.100"]
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+    expect: "allowed"

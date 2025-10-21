@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowECSAndEKS",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:*",
+        "eks:*",
+        "ecr:*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

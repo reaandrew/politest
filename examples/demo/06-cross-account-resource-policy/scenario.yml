@@ -1,0 +1,30 @@
+# Demo 6: Cross-Account Resource Policy
+# Demonstrates how identity policies, resource policies, and SCPs interact
+
+policy_json: "policies/identity-policy.json"
+resource_policy_json: "policies/s3-bucket-policy.json"
+
+scp_paths:
+  - "scp/allow-s3.json"
+
+# Simulate as Alice from account 111111111111
+caller_arn: "arn:aws:iam::111111111111:user/alice"
+
+# Bucket owned by account 222222222222
+resource_owner: "arn:aws:iam::222222222222:root"
+
+tests:
+  - name: "Cross-account GetObject allowed by both policies"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    expect: "allowed"
+
+  - name: "Cross-account PutObject denied by bucket policy"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    expect: "explicitDeny"
+
+  - name: "DeleteObject denied by identity policy (no permission)"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    expect: "implicitDeny"

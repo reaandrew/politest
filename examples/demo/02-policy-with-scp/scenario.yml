@@ -1,0 +1,24 @@
+# Demo 2: Policy with SCP (Both Allow)
+# Demonstrates how SCPs act as permission boundaries
+# Both the policy AND the SCP must allow the action
+
+policy_json: "policies/s3-full-access-policy.json"
+
+scp_paths:
+  - "scp/allow-s3.json"
+
+tests:
+  - name: "GetObject allowed by both policy and SCP"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::my-bucket/data.txt"
+    expect: "allowed"
+
+  - name: "PutObject allowed by both policy and SCP"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::my-bucket/data.txt"
+    expect: "allowed"
+
+  - name: "DeleteBucket allowed by both policy and SCP"
+    action: "s3:DeleteBucket"
+    resource: "arn:aws:s3:::my-bucket"
+    expect: "allowed"
