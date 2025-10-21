@@ -1,0 +1,44 @@
+# Demonstrates --show-matched-success flag
+# This scenario shows passing tests with detailed matched statement information
+# Run with: politest --scenario scenarios/19-show-matched-success-demo.yml --show-matched-success
+#
+# This demonstrates:
+# - Passing tests showing action, resource, and context
+# - Matched statements with source file, line numbers, and statement content
+# - Multiple statements matching (identity policy + SCP)
+
+policy_json: "../policies/identity-conditional-denies.json"
+
+scp_paths:
+  - "../scp/permissive.json"
+
+tests:
+  - name: "S3 Write with MFA - shows AllowS3WriteWithMFA matched"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::secure-bucket/data.txt"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+    expect: "allowed"
+
+  - name: "EC2 operations for Engineering dept - shows AllowEC2ForEngineeringDept matched"
+    action: "ec2:StartInstances"
+    resource: "*"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Engineering"]
+    expect: "allowed"
+
+  - name: "S3 Delete from trusted network with MFA - shows multiple conditions"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::secure-bucket/old-data.txt"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["10.0.1.50"]
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+    expect: "allowed"

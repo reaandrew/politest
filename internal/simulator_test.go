@@ -1358,6 +1358,67 @@ func TestPrintTestFailureWithMultipleContextValues(t *testing.T) {
 	printTestFailure(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "implicitDeny", "policy1", []types.Statement{}, cfg)
 }
 
+func TestPrintTestSuccessWithSingleResource(t *testing.T) {
+	// Capture stdout to verify output
+	test := TestCase{
+		Action:   "s3:GetObject",
+		Resource: "arn:aws:s3:::bucket/*",
+		Expect:   "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	// This will print to stdout - we're just verifying it doesn't crash
+	printTestSuccess(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "allowed", "policy1", []types.Statement{}, cfg)
+}
+
+func TestPrintTestSuccessWithMultipleResources(t *testing.T) {
+	test := TestCase{
+		Action: "s3:ListBucket",
+		Resources: []string{
+			"arn:aws:s3:::bucket1",
+			"arn:aws:s3:::bucket2",
+			"arn:aws:s3:::bucket3",
+		},
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	printTestSuccess(test, "s3:ListBucket", []string{"arn:aws:s3:::bucket1", "arn:aws:s3:::bucket2", "arn:aws:s3:::bucket3"}, "allowed", "policy1", []types.Statement{}, cfg)
+}
+
+func TestPrintTestSuccessWithContext(t *testing.T) {
+	test := TestCase{
+		Action:   "s3:PutObject",
+		Resource: "arn:aws:s3:::secure-bucket/*",
+		Context: []ContextEntryYml{
+			{ContextKeyName: "aws:SourceIp", ContextKeyValues: []string{"10.0.1.50"}},
+			{ContextKeyName: "aws:MultiFactorAuthPresent", ContextKeyValues: []string{"true"}},
+		},
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	printTestSuccess(test, "s3:PutObject", []string{"arn:aws:s3:::secure-bucket/*"}, "allowed", "policy1", []types.Statement{}, cfg)
+}
+
+func TestPrintTestSuccessWithMultipleContextValues(t *testing.T) {
+	test := TestCase{
+		Action:   "s3:GetObject",
+		Resource: "arn:aws:s3:::bucket/*",
+		Context: []ContextEntryYml{
+			{ContextKeyName: "aws:PrincipalTag/Department", ContextKeyValues: []string{"Engineering", "Sales", "Marketing"}},
+		},
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	printTestSuccess(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "allowed", "policy1", []types.Statement{}, cfg)
+}
+
 func TestDisplayMatchedStatementsWithSourceMap(t *testing.T) {
 	tmpDir := t.TempDir()
 

@@ -357,6 +357,9 @@ jobs:
     - name: Run integration tests
       run: ./test/run-tests.sh
 
+    - name: Run failure scenario tests
+      run: ./test/test-failures.sh
+
   example-tests:
     name: Example Tests
     runs-on: ubuntu-latest

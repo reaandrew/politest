@@ -248,16 +248,53 @@ func evaluateTestResult(resp *iam.SimulateCustomPolicyOutput, test TestCase, act
 	}
 
 	if strings.EqualFold(decision, test.Expect) {
-		fmt.Printf("  ✓ PASS: %s (matched: %s)\n", decision, detail)
 		if cfg.ShowMatchedSuccess {
-			displayMatchedStatements(result.MatchedStatements, cfg)
+			printTestSuccess(test, action, resources, decision, detail, result.MatchedStatements, cfg)
+		} else {
+			fmt.Printf("  ✓ PASS: %s (matched: %s)\n\n", decision, detail)
 		}
-		fmt.Println()
 		return true
 	}
 
 	printTestFailure(test, action, resources, decision, detail, result.MatchedStatements, cfg)
 	return false
+}
+
+// printTestSuccess prints a formatted success message with matched statement details
+func printTestSuccess(test TestCase, action string, resources []string, decision, detail string, matchedStatements []types.Statement, cfg SimulatorConfig) {
+	fmt.Printf("  ✓ PASS:\n")
+	fmt.Printf("    Expected: %s\n", test.Expect)
+	fmt.Printf("    Action:   %s\n", action)
+
+	// Display resources
+	if len(resources) == 0 {
+		fmt.Printf("    Resource: *\n")
+	} else if len(resources) == 1 {
+		fmt.Printf("    Resource: %s\n", resources[0])
+	} else {
+		fmt.Printf("    Resources:\n")
+		for _, res := range resources {
+			fmt.Printf("      - %s\n", res)
+		}
+	}
+
+	// Display context keys if present
+	if len(test.Context) > 0 {
+		fmt.Printf("    Context:\n")
+		for _, ctx := range test.Context {
+			if len(ctx.ContextKeyValues) == 1 {
+				fmt.Printf("      %s = %s\n", ctx.ContextKeyName, ctx.ContextKeyValues[0])
+			} else {
+				fmt.Printf("      %s = [%s]\n", ctx.ContextKeyName, strings.Join(ctx.ContextKeyValues, ", "))
+			}
+		}
+	}
+
+	fmt.Printf("    Got:      %s\n", decision)
+
+	// Display matched statements with source information
+	displayMatchedStatements(matchedStatements, cfg)
+	fmt.Println()
 }
 
 // printTestFailure prints a formatted failure message with matched statement details
