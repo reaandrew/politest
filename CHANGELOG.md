@@ -1,3 +1,9 @@
+## [3.1.0](https://github.com/reaandrew/politest/compare/v3.0.0...v3.1.0) (2025-10-21)
+
+### Features
+
+* run integration and example tests on pull requests ([9255327](https://github.com/reaandrew/politest/commit/9255327b7f24e5d69bfa9f1b1bdf807fa8f97346))
+
 ## [3.0.0](https://github.com/reaandrew/politest/compare/v2.3.1...v3.0.0) (2025-10-21)
 
 ### ⚠ BREAKING CHANGES
