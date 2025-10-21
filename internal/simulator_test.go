@@ -102,6 +102,60 @@ func TestRunTestCollectionIntegration(t *testing.T) {
 	}
 }
 
+func TestRunTestCollectionWithShowMatchedSuccess(t *testing.T) {
+	// Save original exiter
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	tmpDir := t.TempDir()
+	action := "s3:GetObject"
+
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName:    &action,
+						EvalDecision:      types.PolicyEvaluationDecisionTypeAllowed,
+						MatchedStatements: []types.Statement{},
+					},
+				},
+			}, nil
+		},
+	}
+
+	scen := &Scenario{
+		Tests: []TestCase{
+			{
+				Name:      "test s3 get object",
+				Action:    action,
+				Resources: []string{"arn:aws:s3:::my-bucket/*"},
+				Expect:    "allowed",
+			},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[]}`
+	allVars := map[string]any{}
+
+	// Call runTestCollection with ShowMatchedSuccess enabled
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+	RunTestCollection(mockClient, scen, SimulatorConfig{
+		PolicyJSON:         policyJSON,
+		ScenarioPath:       scenarioPath,
+		Variables:          allVars,
+		ShowMatchedSuccess: true,
+	})
+
+	// Should not have exited (all tests passed)
+	if mockExit.called {
+		t.Errorf("RunTestCollection() called Exit when all tests passed")
+	}
+}
+
 func TestRunTestCollectionWithFailure(t *testing.T) {
 	// Save original exiter
 	originalExiter := GlobalExiter
@@ -1356,6 +1410,31 @@ func TestPrintTestFailureWithMultipleContextValues(t *testing.T) {
 	cfg := SimulatorConfig{}
 
 	printTestFailure(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "implicitDeny", "policy1", []types.Statement{}, cfg)
+}
+
+func TestPrintTestDetailsWithSingleResource(t *testing.T) {
+	// Capture stdout to verify output
+	test := TestCase{
+		Action:   "s3:GetObject",
+		Resource: "arn:aws:s3:::bucket/*",
+		Expect:   "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	// This will print to stdout - we're just verifying it doesn't crash
+	printTestDetails(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "allowed", []types.Statement{}, cfg)
+}
+
+func TestPrintTestDetailsWithNoResources(t *testing.T) {
+	test := TestCase{
+		Action: "iam:ListUsers",
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	printTestDetails(test, "iam:ListUsers", []string{}, "allowed", []types.Statement{}, cfg)
 }
 
 func TestPrintTestSuccessWithSingleResource(t *testing.T) {
