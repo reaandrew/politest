@@ -112,7 +112,7 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		if err != nil {
 			return nil, err
 		}
-		policyJSON = internal.MinifyJSON(b)
+		policyJSON = internal.PrettyJSON(b)
 	case scen.PolicyTemplate != "":
 		base := filepath.Dir(absScenario)
 		tplPath := internal.MustAbsJoin(base, scen.PolicyTemplate)
@@ -126,7 +126,7 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 	}
 
 	if debug {
-		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered policy (minified):\n%s\n", policyJSON)
+		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered policy (pretty-printed):\n%s\n", policyJSON)
 	}
 
 	// Process identity policy with source tracking (inject tracking Sids)
@@ -147,6 +147,7 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		merged, sourceMap := internal.MergeSCPFilesWithSourceMap(files)
 		scpSourceMap = sourceMap
 		pbJSON = internal.ToJSONMin(merged)
+		pbJSON = internal.ToJSONPretty(merged)
 
 		// Warn that SCP simulation is an approximation (unless suppressed)
 		if !noWarn {
@@ -169,7 +170,7 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		if err != nil {
 			return nil, err
 		}
-		resourcePolicyJSON = internal.MinifyJSON(b)
+		resourcePolicyJSON = internal.PrettyJSON(b)
 	case scen.ResourcePolicyTemplate != "":
 		base := filepath.Dir(absScenario)
 		tplPath := internal.MustAbsJoin(base, scen.ResourcePolicyTemplate)
@@ -180,7 +181,7 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 	}
 
 	if debug && resourcePolicyJSON != "" {
-		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered resource policy (minified):\n%s\n", resourcePolicyJSON)
+		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered resource policy (pretty-printed):\n%s\n", resourcePolicyJSON)
 	}
 
 	// Validate tests exist

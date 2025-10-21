@@ -981,9 +981,9 @@ func TestResolveResourcePolicyWithJSON(t *testing.T) {
 		t.Errorf("resolveResourcePolicy() produced invalid JSON: %v", err)
 	}
 
-	// Verify it's minified (no whitespace)
-	if strings.Contains(result, "\n") || strings.Contains(result, "  ") {
-		t.Error("resolveResourcePolicy() should return minified JSON")
+	// Verify it's pretty-printed (has whitespace)
+	if !strings.Contains(result, "\n") || !strings.Contains(result, "  ") {
+		t.Error("resolveResourcePolicy() should return pretty-printed JSON")
 	}
 }
 

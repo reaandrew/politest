@@ -277,3 +277,23 @@ func ToJSONMin(v any) string {
 	Check(err)
 	return string(b)
 }
+
+// ToJSONPretty marshals a value to pretty-printed JSON string with 2-space indentation
+// This makes AWS API error messages reference line numbers instead of column numbers,
+// significantly improving debuggability
+func ToJSONPretty(v any) string {
+	b, err := json.MarshalIndent(v, "", "  ")
+	Check(err)
+	return string(b)
+}
+
+// PrettyJSON formats JSON bytes into a pretty-printed string with 2-space indentation
+// This makes AWS API error messages reference line numbers instead of column numbers,
+// significantly improving debuggability
+func PrettyJSON(b []byte) string {
+	var anyv any
+	if err := json.Unmarshal(b, &anyv); err != nil {
+		Die("invalid JSON: %v", err)
+	}
+	return ToJSONPretty(anyv)
+}

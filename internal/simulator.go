@@ -243,7 +243,7 @@ func resolveResourcePolicy(test TestCase, cfg SimulatorConfig, testIndex int) st
 		p := MustAbsJoin(base, test.ResourcePolicyJSON)
 		b, err := os.ReadFile(p)
 		Check(err)
-		testResourcePolicy = MinifyJSON(b)
+		testResourcePolicy = PrettyJSON(b)
 	case test.ResourcePolicyTemplate != "":
 		base := filepath.Dir(cfg.ScenarioPath)
 		tplPath := MustAbsJoin(base, test.ResourcePolicyTemplate)

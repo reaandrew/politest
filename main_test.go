@@ -577,7 +577,7 @@ tests:
 		t.Errorf("Expected debug output for policy loading, got: %s", output)
 	}
 
-	if !strings.Contains(output, "🔍 DEBUG: Rendered policy (minified):") {
+	if !strings.Contains(output, "🔍 DEBUG: Rendered policy (pretty-printed):") {
 		t.Errorf("Expected debug output for rendered policy, got: %s", output)
 	}
 }
@@ -757,7 +757,7 @@ tests:
 		t.Errorf("Expected debug output for resource policy loading, got: %s", output)
 	}
 
-	if !strings.Contains(output, "🔍 DEBUG: Rendered resource policy (minified):") {
+	if !strings.Contains(output, "🔍 DEBUG: Rendered resource policy (pretty-printed):") {
 		t.Errorf("Expected debug output for rendered resource policy, got: %s", output)
 	}
 }
