@@ -80,6 +80,11 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
 - **Clean table output**
   - With optional raw JSON export
 
+- **Enhanced failure diagnostics**
+  - Shows matched statement source files with line numbers
+  - Displays full statement JSON from source for failed tests
+  - Optional --show-matched-success flag for passing tests
+
 ## ⚠️ Understanding What politest Tests
 
 **politest is a pre-deployment validation tool that helps you catch IAM policy issues early, but it is NOT a replacement for integration testing in real AWS environments.**
@@ -247,10 +252,11 @@ tests:
 politest [flags]
 
 Flags:
-  --scenario string    Path to scenario YAML (required)
-  --save string        Path to save raw JSON response (optional)
-  --no-assert          Do not fail on expectation mismatches (optional)
-  --no-warn            Suppress SCP/RCP simulation approximation warning (optional)
+  --scenario string         Path to scenario YAML (required)
+  --save string             Path to save raw JSON response (optional)
+  --no-assert               Do not fail on expectation mismatches (optional)
+  --no-warn                 Suppress SCP/RCP simulation approximation warning (optional)
+  --show-matched-success    Show matched statement details for passing tests (optional)
 ```
 
 ## Scenario Configuration
