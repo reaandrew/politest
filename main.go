@@ -32,15 +32,26 @@ func PrintVersion() {
 	fmt.Printf("  go version: %s\n", goVersion)
 }
 
-// run contains the main application logic and returns an error instead of calling Die()
-func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWriter io.Writer) error {
+// simulationPrep holds the prepared simulation data before AWS execution
+type simulationPrep struct {
+	scenario            *internal.Scenario
+	policyJSON          string
+	permissionsBoundary string
+	resourcePolicyJSON  string
+	variables           map[string]any
+	absScenarioPath     string
+}
+
+// prepareSimulation loads and prepares all data for simulation WITHOUT contacting AWS
+// This function is AWS-free and safe for unit testing
+func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.Writer) (*simulationPrep, error) {
 	if scenarioPath == "" {
-		return fmt.Errorf("missing --scenario\nUsage: politest --scenario <path> [--save <path>] [--no-assert] [--no-warn] [--debug]")
+		return nil, fmt.Errorf("missing --scenario\nUsage: politest --scenario <path> [--save <path>] [--no-assert] [--no-warn] [--debug]")
 	}
 
 	absScenario, err := filepath.Abs(scenarioPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if debug {
@@ -49,7 +60,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 
 	scen, err := internal.LoadScenarioWithExtends(absScenario)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if debug && scen.Extends != "" {
@@ -66,7 +77,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 		}
 		vmap := map[string]any{}
 		if err := internal.LoadYAML(vf, &vmap); err != nil {
-			return err
+			return nil, err
 		}
 		for k, v := range vmap {
 			allVars[k] = v
@@ -87,7 +98,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 	var policyJSON string
 	switch {
 	case scen.PolicyJSON != "" && scen.PolicyTemplate != "":
-		return fmt.Errorf("provide only one of 'policy_json' or 'policy_template'")
+		return nil, fmt.Errorf("provide only one of 'policy_json' or 'policy_template'")
 	case scen.PolicyJSON != "":
 		base := filepath.Dir(absScenario)
 		p := internal.MustAbsJoin(base, scen.PolicyJSON)
@@ -96,7 +107,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 		}
 		b, err := os.ReadFile(p)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		policyJSON = internal.MinifyJSON(b)
 	case scen.PolicyTemplate != "":
@@ -107,7 +118,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 		}
 		policyJSON = internal.RenderTemplateFileJSON(tplPath, allVars)
 	default:
-		return fmt.Errorf("scenario must include 'policy_json' or 'policy_template'")
+		return nil, fmt.Errorf("scenario must include 'policy_json' or 'policy_template'")
 	}
 
 	if debug {
@@ -137,7 +148,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 	var resourcePolicyJSON string
 	switch {
 	case scen.ResourcePolicyJSON != "" && scen.ResourcePolicyTemplate != "":
-		return fmt.Errorf("provide only one of 'resource_policy_json' or 'resource_policy_template'")
+		return nil, fmt.Errorf("provide only one of 'resource_policy_json' or 'resource_policy_template'")
 	case scen.ResourcePolicyJSON != "":
 		base := filepath.Dir(absScenario)
 		p := internal.MustAbsJoin(base, scen.ResourcePolicyJSON)
@@ -146,7 +157,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 		}
 		b, err := os.ReadFile(p)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		resourcePolicyJSON = internal.MinifyJSON(b)
 	case scen.ResourcePolicyTemplate != "":
@@ -162,6 +173,29 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered resource policy (minified):\n%s\n", resourcePolicyJSON)
 	}
 
+	// Validate tests exist
+	if len(scen.Tests) == 0 {
+		return nil, fmt.Errorf("scenario must include 'tests' array with at least one test case")
+	}
+
+	return &simulationPrep{
+		scenario:            scen,
+		policyJSON:          policyJSON,
+		permissionsBoundary: pbJSON,
+		resourcePolicyJSON:  resourcePolicyJSON,
+		variables:           allVars,
+		absScenarioPath:     absScenario,
+	}, nil
+}
+
+// run contains the main application logic and returns an error instead of calling Die()
+func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWriter io.Writer) error {
+	// Prepare simulation data (AWS-free)
+	prep, err := prepareSimulation(scenarioPath, noWarn, debug, debugWriter)
+	if err != nil {
+		return err
+	}
+
 	// AWS client setup
 	awsCfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
@@ -171,20 +205,17 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 
 	// Build simulator configuration
 	simCfg := internal.SimulatorConfig{
-		PolicyJSON:          policyJSON,
-		PermissionsBoundary: pbJSON,
-		ResourcePolicyJSON:  resourcePolicyJSON,
-		ScenarioPath:        absScenario,
-		Variables:           allVars,
+		PolicyJSON:          prep.policyJSON,
+		PermissionsBoundary: prep.permissionsBoundary,
+		ResourcePolicyJSON:  prep.resourcePolicyJSON,
+		ScenarioPath:        prep.absScenarioPath,
+		Variables:           prep.variables,
 		SavePath:            savePath,
 		NoAssert:            noAssert,
 	}
 
-	// Validate and run tests
-	if len(scen.Tests) == 0 {
-		return fmt.Errorf("scenario must include 'tests' array with at least one test case")
-	}
-	internal.RunTestCollection(client, scen, simCfg)
+	// Run tests
+	internal.RunTestCollection(client, prep.scenario, simCfg)
 	return nil
 }
 
