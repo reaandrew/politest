@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/aws/aws-sdk-go-v2/config v1.31.13
-	github.com/aws/aws-sdk-go-v2/service/iam v1.40.2
+	github.com/aws/aws-sdk-go-v2/service/iam v1.47.8
 	gopkg.in/yaml.v3 v3.0.1
 )
 
