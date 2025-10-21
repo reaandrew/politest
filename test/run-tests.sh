@@ -37,10 +37,10 @@ PASSED=0
 FAILED=0
 SCENARIOS=()
 
-# Find all scenario files
+# Find all scenario files (exclude fail-*.yml which are tested separately)
 while IFS= read -r -d '' scenario; do
     SCENARIOS+=("$scenario")
-done < <(find "$SCRIPT_DIR/scenarios" -name "*.yml" -print0 | sort -z)
+done < <(find "$SCRIPT_DIR/scenarios" -name "*.yml" ! -name "fail-*.yml" -print0 | sort -z)
 
 # Run each scenario
 for scenario in "${SCENARIOS[@]}"; do

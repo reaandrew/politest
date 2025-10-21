@@ -258,15 +258,35 @@ func evaluateTestResult(resp *iam.SimulateCustomPolicyOutput, test TestCase, act
 
 // printTestFailure prints a formatted failure message with matched statement details
 func printTestFailure(test TestCase, action string, resources []string, decision, detail string, matchedStatements []types.Statement, cfg SimulatorConfig) {
-	if test.Name == "" {
-		resourceStr := "*"
-		if len(resources) > 0 {
-			resourceStr = resources[0]
-		}
-		fmt.Printf("  ✗ FAIL: %s on %s failed: expected %s, got %s\n", action, resourceStr, test.Expect, decision)
+	fmt.Printf("  ✗ FAIL:\n")
+	fmt.Printf("    Expected: %s\n", test.Expect)
+	fmt.Printf("    Action:   %s\n", action)
+
+	// Display resources
+	if len(resources) == 0 {
+		fmt.Printf("    Resource: *\n")
+	} else if len(resources) == 1 {
+		fmt.Printf("    Resource: %s\n", resources[0])
 	} else {
-		fmt.Printf("  ✗ FAIL: expected %s, got %s\n", test.Expect, decision)
+		fmt.Printf("    Resources:\n")
+		for _, res := range resources {
+			fmt.Printf("      - %s\n", res)
+		}
 	}
+
+	// Display context keys if present
+	if len(test.Context) > 0 {
+		fmt.Printf("    Context:\n")
+		for _, ctx := range test.Context {
+			if len(ctx.ContextKeyValues) == 1 {
+				fmt.Printf("      %s = %s\n", ctx.ContextKeyName, ctx.ContextKeyValues[0])
+			} else {
+				fmt.Printf("      %s = [%s]\n", ctx.ContextKeyName, strings.Join(ctx.ContextKeyValues, ", "))
+			}
+		}
+	}
+
+	fmt.Printf("    Got:      %s\n", decision)
 
 	// Display matched statements with source information
 	displayMatchedStatements(matchedStatements, cfg)
@@ -292,72 +312,73 @@ func displaySingleStatement(stmt types.Statement, cfg SimulatorConfig) {
 	}
 
 	sourcePolicyID := *stmt.SourcePolicyId
-	var policyJSON string
-	var sourcePath string
+	var source *PolicySource
 
 	// Determine which policy this statement came from
 	switch {
 	case strings.HasPrefix(sourcePolicyID, "PolicyInputList"):
-		policyJSON = cfg.SourceMap.IdentityPolicyRaw
-		if cfg.SourceMap.Identity != nil {
-			sourcePath = cfg.SourceMap.Identity.FilePath
-		}
+		source = cfg.SourceMap.Identity
 	case strings.HasPrefix(sourcePolicyID, "PermissionsBoundaryPolicyInputList"):
-		policyJSON = cfg.SourceMap.PermissionsBoundaryRaw
-	case strings.HasPrefix(sourcePolicyID, "ResourcePolicy"):
-		policyJSON = cfg.SourceMap.ResourcePolicyRaw
-		if cfg.SourceMap.ResourcePolicy != nil {
-			sourcePath = cfg.SourceMap.ResourcePolicy.FilePath
+		// Look up specific SCP statement by extracting Sid
+		policyJSON := cfg.SourceMap.PermissionsBoundaryRaw
+		if stmt.StartPosition != nil && stmt.EndPosition != nil && policyJSON != "" {
+			stmtJSON := extractStatementFromPolicy(policyJSON, stmt.StartPosition, stmt.EndPosition)
+			if trackingSid := extractSidFromJSON(stmtJSON); trackingSid != "" {
+				if src, ok := cfg.SourceMap.PermissionsBoundary[trackingSid]; ok {
+					source = src
+				}
+			}
 		}
+	case strings.HasPrefix(sourcePolicyID, "ResourcePolicy"):
+		source = cfg.SourceMap.ResourcePolicy
 	default:
 		// Unknown source
 		fmt.Printf("    • %s (unknown source)\n", sourcePolicyID)
 		return
 	}
 
-	// Extract statement JSON using line positions if available
-	var stmtJSON string
-	if stmt.StartPosition != nil && stmt.EndPosition != nil && policyJSON != "" {
-		stmtJSON = extractStatementFromPolicy(policyJSON, stmt.StartPosition, stmt.EndPosition)
-	}
-
-	// Try to parse Sid from the extracted JSON
-	var sid string
-	if stmtJSON != "" {
-		sid = extractSidFromJSON(stmtJSON)
-	}
-
-	// Look up source information for SCP/RCP statements
-	if sid != "" && strings.HasPrefix(sid, "scp:") && cfg.SourceMap.PermissionsBoundary != nil {
-		if source, ok := cfg.SourceMap.PermissionsBoundary[sid]; ok {
-			sourcePath = source.FilePath
-			if source.Sid != "" {
-				fmt.Printf("    • %s (original Sid: %s)\n", sourcePolicyID, source.Sid)
-				fmt.Printf("      Source: %s\n", sourcePath)
-			} else {
-				fmt.Printf("    • %s\n", sourcePolicyID)
-				fmt.Printf("      Source: %s (statement %d)\n", sourcePath, source.Index)
-			}
-		}
-	} else if sourcePath != "" {
-		fmt.Printf("    • %s\n", sourcePolicyID)
-		fmt.Printf("      Source: %s\n", sourcePath)
+	// Display header with Sid if available
+	if source != nil && source.Sid != "" {
+		fmt.Printf("    • %s (Sid: %s)\n", sourcePolicyID, source.Sid)
 	} else {
 		fmt.Printf("    • %s\n", sourcePolicyID)
 	}
 
-	// Always show the statement JSON
-	if stmtJSON != "" {
-		fmt.Printf("      Statement:\n")
-		// Pretty-print with indentation
-		var prettyJSON map[string]any
-		if err := json.Unmarshal([]byte(stmtJSON), &prettyJSON); err == nil {
-			if prettyBytes, err := json.MarshalIndent(prettyJSON, "        ", "  "); err == nil {
-				fmt.Printf("        %s\n", string(prettyBytes))
-			}
+	// Display source file path with line numbers
+	if source != nil && source.FilePath != "" {
+		if source.StartLine > 0 && source.EndLine > 0 {
+			fmt.Printf("      Source: %s:%d-%d\n", source.FilePath, source.StartLine, source.EndLine)
 		} else {
-			// Fallback to raw JSON if parsing fails
-			fmt.Printf("        %s\n", stmtJSON)
+			fmt.Printf("      Source: %s\n", source.FilePath)
+		}
+
+		// Display statement with context from source file
+		displayStatementWithContext(source)
+	}
+}
+
+// displayStatementWithContext reads the source file and displays the statement lines
+func displayStatementWithContext(source *PolicySource) {
+	if source.StartLine == 0 || source.EndLine == 0 {
+		return
+	}
+
+	// Read source file
+	content, err := os.ReadFile(source.FilePath)
+	if err != nil {
+		return
+	}
+
+	lines := strings.Split(string(content), "\n")
+	if len(lines) == 0 {
+		return
+	}
+
+	fmt.Println()
+	// Display only the statement lines (StartLine to EndLine)
+	for i := source.StartLine - 1; i < source.EndLine; i++ { // -1 for 0-based array indexing
+		if i >= 0 && i < len(lines) {
+			fmt.Printf("      %d: %s\n", i+1, lines[i])
 		}
 	}
 }

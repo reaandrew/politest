@@ -64,7 +64,9 @@ type PolicySourceMap struct {
 
 // PolicySource tracks where a policy or statement originated
 type PolicySource struct {
-	FilePath string // Original file path
-	Sid      string // Statement ID
-	Index    int    // Statement index in original file
+	FilePath  string // Original file path
+	Sid       string // Original Statement ID (before tracking Sid injection)
+	Index     int    // Statement index in original file
+	StartLine int    // Line number where statement starts in source file (1-based)
+	EndLine   int    // Line number where statement ends in source file (1-based)
 }

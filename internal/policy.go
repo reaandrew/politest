@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // ExpandGlobsRelative expands glob patterns relative to a base directory
@@ -41,12 +42,16 @@ func MergeSCPFiles(files []string) map[string]any {
 	return merged
 }
 
-// MergeSCPFilesWithSourceMap merges multiple SCP JSON files and tracks statement origins
+// MergeSCPFilesWithSourceMap merges multiple SCP JSON files and tracks statement origins with line numbers
 func MergeSCPFilesWithSourceMap(files []string) (map[string]any, map[string]*PolicySource) {
 	statements := []any{}
 	sourceMap := make(map[string]*PolicySource)
 
 	for _, f := range files {
+		// Read the original file content for line number tracking
+		fileContent, err := os.ReadFile(f)
+		Check(err)
+
 		var doc any
 		Check(ReadJSONFile(f, &doc))
 
@@ -74,7 +79,7 @@ func MergeSCPFilesWithSourceMap(files []string) (map[string]any, map[string]*Pol
 			if stmtMap, ok := stmt.(map[string]any); ok {
 				// Create unique Sid from file path and statement index
 				relPath := filepath.Base(f) // Use basename to keep Sids readable
-				sid := "scp:" + relPath + "#stmt:" + strconv.Itoa(idx)
+				trackingSid := "scp:" + relPath + "#stmt:" + strconv.Itoa(idx)
 
 				// Store original Sid if it exists
 				originalSid := ""
@@ -84,14 +89,19 @@ func MergeSCPFilesWithSourceMap(files []string) (map[string]any, map[string]*Pol
 					}
 				}
 
+				// Find line numbers for this statement in the original file
+				startLine, endLine := findStatementLineNumbers(string(fileContent), stmtMap, idx)
+
 				// Inject our tracking Sid
-				stmtMap["Sid"] = sid
+				stmtMap["Sid"] = trackingSid
 
 				// Track source
-				sourceMap[sid] = &PolicySource{
-					FilePath: f,
-					Sid:      originalSid,
-					Index:    idx,
+				sourceMap[trackingSid] = &PolicySource{
+					FilePath:  f,
+					Sid:       originalSid,
+					Index:     idx,
+					StartLine: startLine,
+					EndLine:   endLine,
 				}
 
 				statements = append(statements, stmtMap)
@@ -107,6 +117,66 @@ func MergeSCPFilesWithSourceMap(files []string) (map[string]any, map[string]*Pol
 	}
 
 	return merged, sourceMap
+}
+
+// findStatementLineNumbers finds the line numbers where a statement appears in the source file
+func findStatementLineNumbers(fileContent string, stmt map[string]any, stmtIndex int) (int, int) {
+	lines := strings.Split(fileContent, "\n")
+
+	// Try to find the statement's Sid or Effect as a marker
+	var searchKey, searchValue string
+	if sid, ok := stmt["Sid"].(string); ok && sid != "" {
+		searchKey = "Sid"
+		searchValue = sid
+	} else if effect, ok := stmt["Effect"].(string); ok {
+		searchKey = "Effect"
+		searchValue = effect
+	}
+
+	if searchKey == "" {
+		return 0, 0
+	}
+
+	// Search for the key-value pair in the file
+	searchPattern := "\"" + searchKey + "\"" + ":" // Look for "Sid": or "Effect":
+	foundCount := 0
+	var startLine int
+
+	for i, line := range lines {
+		if strings.Contains(line, searchPattern) && strings.Contains(line, searchValue) {
+			if foundCount == stmtIndex {
+				// Found the right statement, now find its boundaries
+				// Search backwards for opening brace
+				for j := i; j >= 0; j-- {
+					trimmed := strings.TrimSpace(lines[j])
+					if trimmed == "{" {
+						startLine = j + 1 // 1-based line numbers
+						break
+					}
+				}
+
+				// Search forwards for closing brace
+				braceCount := 0
+				foundOpen := false
+				for j := startLine - 1; j < len(lines); j++ {
+					for _, ch := range lines[j] {
+						if ch == '{' {
+							braceCount++
+							foundOpen = true
+						} else if ch == '}' {
+							braceCount--
+							if foundOpen && braceCount == 0 {
+								return startLine, j + 1 // 1-based line numbers
+							}
+						}
+					}
+				}
+			}
+			foundCount++
+		}
+	}
+
+	return 0, 0
 }
 
 // ReadJSONFile reads a JSON file and decodes it into v
