@@ -1412,6 +1412,128 @@ func TestPrintTestFailureWithMultipleContextValues(t *testing.T) {
 	printTestFailure(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "implicitDeny", "policy1", []types.Statement{}, cfg)
 }
 
+func TestEvaluateTestResultNoEvaluationResults(t *testing.T) {
+	resp := &iam.SimulateCustomPolicyOutput{
+		EvaluationResults: []types.EvaluationResult{},
+	}
+
+	test := TestCase{
+		Action: "s3:GetObject",
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	result := evaluateTestResult(resp, test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, cfg)
+	if result {
+		t.Error("Expected evaluateTestResult to return false when no evaluation results")
+	}
+}
+
+func TestEvaluateTestResultNoExpectation(t *testing.T) {
+	action := "s3:GetObject"
+	resp := &iam.SimulateCustomPolicyOutput{
+		EvaluationResults: []types.EvaluationResult{
+			{
+				EvalActionName:    &action,
+				EvalDecision:      types.PolicyEvaluationDecisionTypeAllowed,
+				MatchedStatements: []types.Statement{},
+			},
+		},
+	}
+
+	test := TestCase{
+		Action: "s3:GetObject",
+		Expect: "", // No expectation
+	}
+
+	cfg := SimulatorConfig{}
+
+	result := evaluateTestResult(resp, test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, cfg)
+	if !result {
+		t.Error("Expected evaluateTestResult to return true when no expectation is set")
+	}
+}
+
+func TestEvaluateTestResultWithShowMatchedSuccessFalse(t *testing.T) {
+	action := "s3:GetObject"
+	resp := &iam.SimulateCustomPolicyOutput{
+		EvaluationResults: []types.EvaluationResult{
+			{
+				EvalActionName:    &action,
+				EvalDecision:      types.PolicyEvaluationDecisionTypeAllowed,
+				MatchedStatements: []types.Statement{},
+			},
+		},
+	}
+
+	test := TestCase{
+		Action: "s3:GetObject",
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{
+		ShowMatchedSuccess: false,
+	}
+
+	result := evaluateTestResult(resp, test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, cfg)
+	if !result {
+		t.Error("Expected evaluateTestResult to return true when test passes")
+	}
+}
+
+func TestEvaluateTestResultWithShowMatchedSuccessTrue(t *testing.T) {
+	action := "s3:GetObject"
+	resp := &iam.SimulateCustomPolicyOutput{
+		EvaluationResults: []types.EvaluationResult{
+			{
+				EvalActionName:    &action,
+				EvalDecision:      types.PolicyEvaluationDecisionTypeAllowed,
+				MatchedStatements: []types.Statement{},
+			},
+		},
+	}
+
+	test := TestCase{
+		Action: "s3:GetObject",
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{
+		ShowMatchedSuccess: true,
+	}
+
+	result := evaluateTestResult(resp, test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, cfg)
+	if !result {
+		t.Error("Expected evaluateTestResult to return true when test passes")
+	}
+}
+
+func TestEvaluateTestResultMismatch(t *testing.T) {
+	action := "s3:GetObject"
+	resp := &iam.SimulateCustomPolicyOutput{
+		EvaluationResults: []types.EvaluationResult{
+			{
+				EvalActionName:    &action,
+				EvalDecision:      types.PolicyEvaluationDecisionTypeImplicitDeny,
+				MatchedStatements: []types.Statement{},
+			},
+		},
+	}
+
+	test := TestCase{
+		Action: "s3:GetObject",
+		Expect: "allowed",
+	}
+
+	cfg := SimulatorConfig{}
+
+	result := evaluateTestResult(resp, test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, cfg)
+	if result {
+		t.Error("Expected evaluateTestResult to return false when test fails")
+	}
+}
+
 func TestPrintTestDetailsWithSingleResource(t *testing.T) {
 	// Capture stdout to verify output
 	test := TestCase{
@@ -1496,6 +1618,185 @@ func TestPrintTestSuccessWithMultipleContextValues(t *testing.T) {
 	cfg := SimulatorConfig{}
 
 	printTestSuccess(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "allowed", "policy1", []types.Statement{}, cfg)
+}
+
+func TestPrintTestSuccessWithSourceMap(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	policyFile := filepath.Join(tmpDir, "policy.json")
+	policyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowS3",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "*"
+    }
+  ]
+}`
+	if err := os.WriteFile(policyFile, []byte(policyContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	trackingSid := "identity#stmt:0"
+	sourceMap := &PolicySourceMap{
+		Identity: map[string]*PolicySource{
+			trackingSid: {
+				FilePath:  policyFile,
+				Sid:       "AllowS3",
+				StartLine: 4,
+				EndLine:   9,
+			},
+		},
+		IdentityPolicyRaw: `{"Version":"2012-10-17","Statement":[{"Sid":"identity#stmt:0","Effect":"Allow","Action":"s3:*","Resource":"*"}]}`,
+	}
+
+	test := TestCase{
+		Action:   "s3:GetObject",
+		Resource: "arn:aws:s3:::bucket/*",
+		Expect:   "allowed",
+	}
+
+	cfg := SimulatorConfig{
+		SourceMap: sourceMap,
+	}
+
+	sourcePolicyID := "PolicyInputList.1"
+	line4, col5 := int32(4), int32(5)
+	line9, col6 := int32(9), int32(6)
+	matchedStmts := []types.Statement{
+		{
+			SourcePolicyId: &sourcePolicyID,
+			StartPosition:  &types.Position{Line: line4, Column: col5},
+			EndPosition:    &types.Position{Line: line9, Column: col6},
+		},
+	}
+
+	printTestSuccess(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "allowed", "policy1", matchedStmts, cfg)
+}
+
+func TestPrintTestDetailsWithSourceMap(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	policyFile := filepath.Join(tmpDir, "policy.json")
+	policyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowS3",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "*"
+    }
+  ]
+}`
+	if err := os.WriteFile(policyFile, []byte(policyContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	trackingSid := "identity#stmt:0"
+	sourceMap := &PolicySourceMap{
+		Identity: map[string]*PolicySource{
+			trackingSid: {
+				FilePath:  policyFile,
+				Sid:       "AllowS3",
+				StartLine: 4,
+				EndLine:   9,
+			},
+		},
+		IdentityPolicyRaw: `{"Version":"2012-10-17","Statement":[{"Sid":"identity#stmt:0","Effect":"Allow","Action":"s3:*","Resource":"*"}]}`,
+	}
+
+	test := TestCase{
+		Action:   "s3:GetObject",
+		Resource: "arn:aws:s3:::bucket/*",
+		Expect:   "allowed",
+		Context: []ContextEntryYml{
+			{ContextKeyName: "aws:SourceIp", ContextKeyValues: []string{"10.0.1.50"}},
+		},
+	}
+
+	cfg := SimulatorConfig{
+		SourceMap: sourceMap,
+	}
+
+	sourcePolicyID := "PolicyInputList.1"
+	line4, col5 := int32(4), int32(5)
+	line9, col6 := int32(9), int32(6)
+	matchedStmts := []types.Statement{
+		{
+			SourcePolicyId: &sourcePolicyID,
+			StartPosition:  &types.Position{Line: line4, Column: col5},
+			EndPosition:    &types.Position{Line: line9, Column: col6},
+		},
+	}
+
+	printTestDetails(test, "s3:GetObject", []string{"arn:aws:s3:::bucket/*"}, "allowed", matchedStmts, cfg)
+}
+
+func TestProcessIdentityPolicyWithSourceMap(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	policyFile := filepath.Join(tmpDir, "policy.json")
+	policyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowS3GetObject",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowS3PutObject",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "*"
+    }
+  ]
+}`
+	if err := os.WriteFile(policyFile, []byte(policyContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read and minify the policy
+	policyBytes, err := os.ReadFile(policyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyJSON := MinifyJSON(policyBytes)
+
+	// Process the policy
+	modifiedJSON, sourceMap := ProcessIdentityPolicyWithSourceMap(policyJSON, policyFile)
+
+	// Verify source map was created
+	if len(sourceMap) != 2 {
+		t.Errorf("Expected 2 entries in source map, got %d", len(sourceMap))
+	}
+
+	// Verify tracking Sids were injected
+	if !strings.Contains(modifiedJSON, "identity#stmt:0") {
+		t.Error("Expected tracking Sid 'identity#stmt:0' in modified JSON")
+	}
+	if !strings.Contains(modifiedJSON, "identity#stmt:1") {
+		t.Error("Expected tracking Sid 'identity#stmt:1' in modified JSON")
+	}
+
+	// Verify source info for first statement
+	if source, ok := sourceMap["identity#stmt:0"]; ok {
+		if source.Sid != "AllowS3GetObject" {
+			t.Errorf("Expected original Sid 'AllowS3GetObject', got '%s'", source.Sid)
+		}
+		if source.FilePath != policyFile {
+			t.Errorf("Expected file path '%s', got '%s'", policyFile, source.FilePath)
+		}
+		if source.StartLine == 0 {
+			t.Error("Expected non-zero start line")
+		}
+	} else {
+		t.Error("Expected source map entry for 'identity#stmt:0'")
+	}
 }
 
 func TestDisplayMatchedStatementsWithSourceMap(t *testing.T) {
