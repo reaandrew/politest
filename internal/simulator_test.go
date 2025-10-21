@@ -1258,6 +1258,136 @@ func TestRunTestCollectionWithActionsArray(t *testing.T) {
 	}
 }
 
+func TestFilterTestsByName(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       []TestCase
+		filterNames string
+		vars        map[string]any
+		wantLen     int
+		wantNames   []string
+	}{
+		{
+			name: "empty filter returns all tests",
+			input: []TestCase{
+				{Name: "Test 1", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*"},
+				{Name: "Test 2", Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket/*"},
+			},
+			filterNames: "",
+			vars:        map[string]any{},
+			wantLen:     2,
+			wantNames:   []string{"Test 1", "Test 2"},
+		},
+		{
+			name: "filter by single explicit test name",
+			input: []TestCase{
+				{Name: "GetObject should be allowed", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*"},
+				{Name: "PutObject should be allowed", Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket/*"},
+				{Name: "DeleteObject should be denied", Action: "s3:DeleteObject", Resource: "arn:aws:s3:::bucket/*"},
+			},
+			filterNames: "GetObject should be allowed",
+			vars:        map[string]any{},
+			wantLen:     1,
+			wantNames:   []string{"GetObject should be allowed"},
+		},
+		{
+			name: "filter by multiple explicit test names (comma-separated)",
+			input: []TestCase{
+				{Name: "Test 1", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*"},
+				{Name: "Test 2", Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket/*"},
+				{Name: "Test 3", Action: "s3:DeleteObject", Resource: "arn:aws:s3:::bucket/*"},
+			},
+			filterNames: "Test 1,Test 3",
+			vars:        map[string]any{},
+			wantLen:     2,
+			wantNames:   []string{"Test 1", "Test 3"},
+		},
+		{
+			name: "filter by auto-generated name (unnamed test)",
+			input: []TestCase{
+				{Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*"},
+				{Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket/*"},
+			},
+			filterNames: "s3:GetObject on arn:aws:s3:::bucket/*",
+			vars:        map[string]any{},
+			wantLen:     1,
+			wantNames:   []string{""},
+		},
+		{
+			name: "mixed named and unnamed tests",
+			input: []TestCase{
+				{Name: "Named test", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket1/*"},
+				{Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket2/*"},
+				{Name: "Another named test", Action: "s3:ListBucket", Resource: "arn:aws:s3:::bucket3"},
+			},
+			filterNames: "Named test,s3:PutObject on arn:aws:s3:::bucket2/*",
+			vars:        map[string]any{},
+			wantLen:     2,
+			wantNames:   []string{"Named test", ""},
+		},
+		{
+			name: "template variables in test names",
+			input: []TestCase{
+				{Name: "Test with var", Action: "s3:GetObject", Resource: "arn:aws:s3:::{{.bucket_name}}/*"},
+				{Action: "s3:PutObject", Resource: "arn:aws:s3:::{{.bucket_name}}/*"},
+			},
+			filterNames: "s3:PutObject on arn:aws:s3:::my-bucket/*",
+			vars:        map[string]any{"bucket_name": "my-bucket"},
+			wantLen:     1,
+			wantNames:   []string{""},
+		},
+		{
+			name: "whitespace trimming in filter names",
+			input: []TestCase{
+				{Name: "Test 1", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*"},
+				{Name: "Test 2", Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket/*"},
+			},
+			filterNames: "  Test 1  ,  Test 2  ",
+			vars:        map[string]any{},
+			wantLen:     2,
+			wantNames:   []string{"Test 1", "Test 2"},
+		},
+		{
+			name: "no matching tests returns empty",
+			input: []TestCase{
+				{Name: "Test 1", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*"},
+				{Name: "Test 2", Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket/*"},
+			},
+			filterNames: "NonExistentTest",
+			vars:        map[string]any{},
+			wantLen:     0,
+			wantNames:   []string{},
+		},
+		{
+			name: "auto-generated name with Resources array",
+			input: []TestCase{
+				{Action: "s3:GetObject", Resources: []string{"arn:aws:s3:::bucket1/*", "arn:aws:s3:::bucket2/*"}},
+			},
+			filterNames: "s3:GetObject on arn:aws:s3:::bucket1/*",
+			vars:        map[string]any{},
+			wantLen:     1,
+			wantNames:   []string{""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterTestsByName(tt.input, tt.filterNames, tt.vars)
+
+			if len(result) != tt.wantLen {
+				t.Errorf("filterTestsByName() returned %d tests, want %d", len(result), tt.wantLen)
+			}
+
+			// Verify the correct tests were selected
+			for i, test := range result {
+				if i < len(tt.wantNames) && tt.wantNames[i] != "" && test.Name != tt.wantNames[i] {
+					t.Errorf("filterTestsByName() result[%d].Name = %q, want %q", i, test.Name, tt.wantNames[i])
+				}
+			}
+		})
+	}
+}
+
 func TestExtractSidFromJSON(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -2047,4 +2177,133 @@ func TestDisplayMatchedStatementsEmpty(t *testing.T) {
 
 	// Should return early with empty statements
 	displayMatchedStatements(matchedStatements, cfg)
+}
+
+func TestFilterTestsByNameWithTemplateVariables(t *testing.T) {
+	tests := []TestCase{
+		{
+			Name:     "Test with rendered vars",
+			Action:   "s3:GetObject",
+			Resource: "arn:aws:s3:::{{.bucket_name}}/{{.prefix}}/*",
+		},
+		{
+			Action:   "s3:PutObject",
+			Resource: "arn:aws:s3:::{{.bucket_name}}/{{.prefix}}/*",
+		},
+	}
+
+	vars := map[string]any{
+		"bucket_name": "my-bucket",
+		"prefix":      "data",
+	}
+
+	// Filter by auto-generated name with variables rendered
+	result := filterTestsByName(tests, "s3:PutObject on arn:aws:s3:::my-bucket/data/*", vars)
+
+	if len(result) != 1 {
+		t.Errorf("filterTestsByName() returned %d tests, want 1", len(result))
+	}
+
+	if result[0].Action != "s3:PutObject" {
+		t.Errorf("filterTestsByName() returned wrong test, got action %q", result[0].Action)
+	}
+}
+
+func TestRunTestCollectionWithTestFilter(t *testing.T) {
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	callCount := 0
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			callCount++
+			action := params.ActionNames[0]
+			return &iam.SimulateCustomPolicyOutput{
+				EvaluationResults: []types.EvaluationResult{
+					{
+						EvalActionName: &action,
+						EvalDecision:   types.PolicyEvaluationDecisionTypeAllowed,
+					},
+				},
+			}, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		Tests: []TestCase{
+			{Name: "Test 1", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*", Expect: "allowed"},
+			{Name: "Test 2", Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket/*", Expect: "allowed"},
+			{Name: "Test 3", Action: "s3:DeleteObject", Resource: "arn:aws:s3:::bucket/*", Expect: "allowed"},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	// Run with filter for only "Test 1"
+	RunTestCollection(mockClient, scen, SimulatorConfig{
+		PolicyJSON:   policyJSON,
+		ScenarioPath: scenarioPath,
+		Variables:    allVars,
+		TestFilter:   "Test 1",
+	})
+
+	// Should have called AWS API only once (for Test 1)
+	if callCount != 1 {
+		t.Errorf("Expected 1 AWS API call with filter, got %d", callCount)
+	}
+
+	if mockExit.called {
+		t.Errorf("RunTestCollection() exited unexpectedly with code %d", mockExit.exitCode)
+	}
+}
+
+func TestRunTestCollectionWithTestFilterNoMatches(t *testing.T) {
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	mockClient := &mockIAMClient{
+		SimulateCustomPolicyFunc: func(ctx context.Context, params *iam.SimulateCustomPolicyInput, optFns ...func(*iam.Options)) (*iam.SimulateCustomPolicyOutput, error) {
+			t.Error("SimulateCustomPolicy should not be called when no tests match filter")
+			return nil, nil
+		},
+	}
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	scen := &Scenario{
+		Tests: []TestCase{
+			{Name: "Test 1", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*", Expect: "allowed"},
+			{Name: "Test 2", Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket/*", Expect: "allowed"},
+		},
+	}
+
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`
+	allVars := map[string]any{}
+
+	// Run with filter that matches no tests
+	RunTestCollection(mockClient, scen, SimulatorConfig{
+		PolicyJSON:   policyJSON,
+		ScenarioPath: scenarioPath,
+		Variables:    allVars,
+		TestFilter:   "NonExistentTest",
+	})
+
+	// Should have exited with code 1 (no matching tests)
+	if !mockExit.called {
+		t.Error("RunTestCollection() should exit when no tests match filter")
+	}
+	if mockExit.exitCode != 1 {
+		t.Errorf("Expected exit code 1, got %d", mockExit.exitCode)
+	}
 }
