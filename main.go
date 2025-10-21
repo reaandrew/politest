@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -32,7 +33,7 @@ func PrintVersion() {
 }
 
 // run contains the main application logic and returns an error instead of calling Die()
-func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
+func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWriter io.Writer) error {
 	if scenarioPath == "" {
 		return fmt.Errorf("missing --scenario\nUsage: politest --scenario <path> [--save <path>] [--no-assert] [--no-warn] [--debug]")
 	}
@@ -43,7 +44,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 	}
 
 	if debug {
-		fmt.Printf("🔍 DEBUG: Loading scenario from: %s\n", absScenario)
+		fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading scenario from: %s\n", absScenario)
 	}
 
 	scen, err := internal.LoadScenarioWithExtends(absScenario)
@@ -52,7 +53,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 	}
 
 	if debug && scen.Extends != "" {
-		fmt.Printf("🔍 DEBUG: Scenario extends: %s\n", scen.Extends)
+		fmt.Fprintf(debugWriter, "🔍 DEBUG: Scenario extends: %s\n", scen.Extends)
 	}
 
 	// Build vars: vars_file (if present), then inline vars override
@@ -61,7 +62,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 		base := filepath.Dir(absScenario)
 		vf := internal.MustAbsJoin(base, scen.VarsFile)
 		if debug {
-			fmt.Printf("🔍 DEBUG: Loading variables from: %s\n", vf)
+			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading variables from: %s\n", vf)
 		}
 		vmap := map[string]any{}
 		if err := internal.LoadYAML(vf, &vmap); err != nil {
@@ -76,9 +77,9 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 	}
 
 	if debug && len(allVars) > 0 {
-		fmt.Printf("🔍 DEBUG: Variables available:\n")
+		fmt.Fprintf(debugWriter, "🔍 DEBUG: Variables available:\n")
 		for k, v := range allVars {
-			fmt.Printf("  - %s = %v\n", k, v)
+			fmt.Fprintf(debugWriter, "  - %s = %v\n", k, v)
 		}
 	}
 
@@ -91,7 +92,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 		base := filepath.Dir(absScenario)
 		p := internal.MustAbsJoin(base, scen.PolicyJSON)
 		if debug {
-			fmt.Printf("🔍 DEBUG: Loading policy from: %s\n", p)
+			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading policy from: %s\n", p)
 		}
 		b, err := os.ReadFile(p)
 		if err != nil {
@@ -102,7 +103,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 		base := filepath.Dir(absScenario)
 		tplPath := internal.MustAbsJoin(base, scen.PolicyTemplate)
 		if debug {
-			fmt.Printf("🔍 DEBUG: Loading policy template from: %s\n", tplPath)
+			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading policy template from: %s\n", tplPath)
 		}
 		policyJSON = internal.RenderTemplateFileJSON(tplPath, allVars)
 	default:
@@ -110,7 +111,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 	}
 
 	if debug {
-		fmt.Printf("🔍 DEBUG: Rendered policy (minified):\n%s\n", policyJSON)
+		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered policy (minified):\n%s\n", policyJSON)
 	}
 
 	// Merge SCPs (permissions boundary)
@@ -118,9 +119,9 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 	if len(scen.SCPPaths) > 0 {
 		files := internal.ExpandGlobsRelative(filepath.Dir(absScenario), scen.SCPPaths)
 		if debug {
-			fmt.Printf("🔍 DEBUG: Loading SCP/RCP files:\n")
+			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading SCP/RCP files:\n")
 			for _, f := range files {
-				fmt.Printf("  - %s\n", f)
+				fmt.Fprintf(debugWriter, "  - %s\n", f)
 			}
 		}
 		merged := internal.MergeSCPFiles(files)
@@ -141,7 +142,7 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 		base := filepath.Dir(absScenario)
 		p := internal.MustAbsJoin(base, scen.ResourcePolicyJSON)
 		if debug {
-			fmt.Printf("🔍 DEBUG: Loading resource policy from: %s\n", p)
+			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading resource policy from: %s\n", p)
 		}
 		b, err := os.ReadFile(p)
 		if err != nil {
@@ -152,13 +153,13 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool) error {
 		base := filepath.Dir(absScenario)
 		tplPath := internal.MustAbsJoin(base, scen.ResourcePolicyTemplate)
 		if debug {
-			fmt.Printf("🔍 DEBUG: Loading resource policy template from: %s\n", tplPath)
+			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading resource policy template from: %s\n", tplPath)
 		}
 		resourcePolicyJSON = internal.RenderTemplateFileJSON(tplPath, allVars)
 	}
 
 	if debug && resourcePolicyJSON != "" {
-		fmt.Printf("🔍 DEBUG: Rendered resource policy (minified):\n%s\n", resourcePolicyJSON)
+		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered resource policy (minified):\n%s\n", resourcePolicyJSON)
 	}
 
 	// AWS client setup
@@ -250,7 +251,7 @@ func realMain(args []string) int {
 	}
 
 	// Run main logic
-	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn, flags.debug); err != nil {
+	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn, flags.debug, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}

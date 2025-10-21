@@ -177,7 +177,8 @@ func TestUnknownArguments(t *testing.T) {
 
 func TestRunMissingScenario(t *testing.T) {
 	// Test run() with empty scenario path
-	err := run("", "", false, false, false)
+	var buf bytes.Buffer
+	err := run("", "", false, false, false, &buf)
 	if err == nil {
 		t.Error("Expected error when scenario path is empty")
 	}
@@ -189,7 +190,8 @@ func TestRunMissingScenario(t *testing.T) {
 
 func TestRunInvalidScenarioFile(t *testing.T) {
 	// Test run() with non-existent scenario file
-	err := run("/nonexistent/scenario.yml", "", false, false, false)
+	var buf bytes.Buffer
+	err := run("/nonexistent/scenario.yml", "", false, false, false, &buf)
 	if err == nil {
 		t.Error("Expected error when scenario file does not exist")
 	}
@@ -212,7 +214,8 @@ tests:
 		t.Fatalf("Failed to create scenario file: %v", err)
 	}
 
-	err := run(scenarioPath, "", false, false, false)
+	var buf bytes.Buffer
+	err := run(scenarioPath, "", false, false, false, &buf)
 	if err == nil {
 		t.Error("Expected error when both policy_json and policy_template are specified")
 	}
@@ -237,7 +240,8 @@ func TestRunMissingPolicyFields(t *testing.T) {
 		t.Fatalf("Failed to create scenario file: %v", err)
 	}
 
-	err := run(scenarioPath, "", false, false, false)
+	var buf bytes.Buffer
+	err := run(scenarioPath, "", false, false, false, &buf)
 	if err == nil {
 		t.Error("Expected error when neither policy_json nor policy_template is specified")
 	}
@@ -266,7 +270,8 @@ tests: []
 		t.Fatalf("Failed to create scenario file: %v", err)
 	}
 
-	err := run(scenarioPath, "", false, false, false)
+	var buf bytes.Buffer
+	err := run(scenarioPath, "", false, false, false, &buf)
 	if err == nil {
 		t.Error("Expected error when tests array is empty")
 	}
@@ -285,16 +290,18 @@ func TestParseFlags(t *testing.T) {
 		wantNoAssert bool
 		wantNoWarn   bool
 		wantVersion  bool
+		wantDebug    bool
 		wantErr      bool
 	}{
 		{
 			name:         "all flags",
-			args:         []string{"--scenario", "test.yml", "--save", "out.json", "--no-assert", "--no-warn", "--version"},
+			args:         []string{"--scenario", "test.yml", "--save", "out.json", "--no-assert", "--no-warn", "--version", "--debug"},
 			wantScenario: "test.yml",
 			wantSave:     "out.json",
 			wantNoAssert: true,
 			wantNoWarn:   true,
 			wantVersion:  true,
+			wantDebug:    true,
 		},
 		{
 			name:         "only scenario",
@@ -310,6 +317,17 @@ func TestParseFlags(t *testing.T) {
 		{
 			name: "no flags",
 			args: []string{},
+		},
+		{
+			name:         "debug flag",
+			args:         []string{"--scenario", "test.yml", "--debug"},
+			wantScenario: "test.yml",
+			wantDebug:    true,
+		},
+		{
+			name:      "debug without scenario",
+			args:      []string{"--debug"},
+			wantDebug: true,
 		},
 	}
 
@@ -338,6 +356,9 @@ func TestParseFlags(t *testing.T) {
 			}
 			if flags.showVersion != tt.wantVersion {
 				t.Errorf("showVersion = %v, want %v", flags.showVersion, tt.wantVersion)
+			}
+			if flags.debug != tt.wantDebug {
+				t.Errorf("debug = %v, want %v", flags.debug, tt.wantDebug)
 			}
 		})
 	}
@@ -487,5 +508,228 @@ func TestRealMainInvalidScenario(t *testing.T) {
 
 	if exitCode != 1 {
 		t.Errorf("Expected exit code 1, got %d", exitCode)
+	}
+}
+
+func TestRunDebugOutputEnabled(t *testing.T) {
+	// Create a minimal valid scenario with policy_json
+	tmpDir := t.TempDir()
+	scenarioPath := tmpDir + "/scenario.yml"
+	policyPath := tmpDir + "/policy.json"
+
+	policyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "s3:GetObject",
+    "Resource": "*"
+  }]
+}`
+
+	scenarioContent := `policy_json: "policy.json"
+tests:
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "allowed"
+`
+
+	if err := os.WriteFile(policyPath, []byte(policyContent), 0600); err != nil {
+		t.Fatalf("Failed to create policy file: %v", err)
+	}
+
+	if err := os.WriteFile(scenarioPath, []byte(scenarioContent), 0600); err != nil {
+		t.Fatalf("Failed to create scenario file: %v", err)
+	}
+
+	// Use bytes.Buffer to capture debug output
+	var debugBuf bytes.Buffer
+
+	// Run with debug=true (will fail at AWS call, but we only care about debug output)
+	_ = run(scenarioPath, "", false, false, true, &debugBuf)
+
+	output := debugBuf.String()
+
+	// Verify debug output is present
+	if !strings.Contains(output, "🔍 DEBUG: Loading scenario from:") {
+		t.Errorf("Expected debug output for scenario loading, got: %s", output)
+	}
+
+	if !strings.Contains(output, "🔍 DEBUG: Loading policy from:") {
+		t.Errorf("Expected debug output for policy loading, got: %s", output)
+	}
+
+	if !strings.Contains(output, "🔍 DEBUG: Rendered policy (minified):") {
+		t.Errorf("Expected debug output for rendered policy, got: %s", output)
+	}
+}
+
+func TestRunDebugOutputDisabled(t *testing.T) {
+	// Create a minimal valid scenario with policy_json
+	tmpDir := t.TempDir()
+	scenarioPath := tmpDir + "/scenario.yml"
+	policyPath := tmpDir + "/policy.json"
+
+	policyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "s3:GetObject",
+    "Resource": "*"
+  }]
+}`
+
+	scenarioContent := `policy_json: "policy.json"
+tests:
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "allowed"
+`
+
+	if err := os.WriteFile(policyPath, []byte(policyContent), 0600); err != nil {
+		t.Fatalf("Failed to create policy file: %v", err)
+	}
+
+	if err := os.WriteFile(scenarioPath, []byte(scenarioContent), 0600); err != nil {
+		t.Fatalf("Failed to create scenario file: %v", err)
+	}
+
+	// Use bytes.Buffer to capture debug output
+	var debugBuf bytes.Buffer
+
+	// Run with debug=false (will fail at AWS call, but we only care about debug output)
+	_ = run(scenarioPath, "", false, false, false, &debugBuf)
+
+	output := debugBuf.String()
+
+	// Verify NO debug output is present
+	if strings.Contains(output, "🔍 DEBUG:") {
+		t.Errorf("Expected no debug output when debug=false, but found: %s", output)
+	}
+}
+
+func TestRunDebugWithTemplate(t *testing.T) {
+	// Create scenario with policy_template and vars
+	tmpDir := t.TempDir()
+	scenarioPath := tmpDir + "/scenario.yml"
+	policyPath := tmpDir + "/policy.json.tpl"
+	varsPath := tmpDir + "/vars.yml"
+
+	policyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "{{.action}}",
+    "Resource": "{{.resource}}"
+  }]
+}`
+
+	varsContent := `action: "s3:GetObject"
+resource: "arn:aws:s3:::mybucket/*"
+`
+
+	scenarioContent := `policy_template: "policy.json.tpl"
+vars_file: "vars.yml"
+tests:
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::mybucket/*"
+    expect: "allowed"
+`
+
+	if err := os.WriteFile(policyPath, []byte(policyContent), 0600); err != nil {
+		t.Fatalf("Failed to create policy template: %v", err)
+	}
+
+	if err := os.WriteFile(varsPath, []byte(varsContent), 0600); err != nil {
+		t.Fatalf("Failed to create vars file: %v", err)
+	}
+
+	if err := os.WriteFile(scenarioPath, []byte(scenarioContent), 0600); err != nil {
+		t.Fatalf("Failed to create scenario file: %v", err)
+	}
+
+	// Use bytes.Buffer to capture debug output
+	var debugBuf bytes.Buffer
+
+	// Run with debug=true
+	_ = run(scenarioPath, "", false, false, true, &debugBuf)
+
+	output := debugBuf.String()
+
+	// Verify template-specific debug output
+	if !strings.Contains(output, "🔍 DEBUG: Loading variables from:") {
+		t.Errorf("Expected debug output for variables loading, got: %s", output)
+	}
+
+	if !strings.Contains(output, "🔍 DEBUG: Variables available:") {
+		t.Errorf("Expected debug output for variables list, got: %s", output)
+	}
+
+	if !strings.Contains(output, "🔍 DEBUG: Loading policy template from:") {
+		t.Errorf("Expected debug output for policy template loading, got: %s", output)
+	}
+}
+
+func TestRunDebugWithResourcePolicy(t *testing.T) {
+	// Create scenario with resource policy to test resource policy debug output
+	tmpDir := t.TempDir()
+	scenarioPath := tmpDir + "/scenario.yml"
+	policyPath := tmpDir + "/policy.json"
+	resourcePolicyPath := tmpDir + "/resource-policy.json"
+
+	policyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "s3:*",
+    "Resource": "*"
+  }]
+}`
+
+	resourcePolicyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"AWS": "*"},
+    "Action": "s3:GetObject",
+    "Resource": "arn:aws:s3:::bucket/*"
+  }]
+}`
+
+	scenarioContent := `policy_json: "policy.json"
+resource_policy_json: "resource-policy.json"
+caller_arn: "arn:aws:iam::123456789012:user/test"
+tests:
+  - action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    expect: "allowed"
+`
+
+	if err := os.WriteFile(policyPath, []byte(policyContent), 0600); err != nil {
+		t.Fatalf("Failed to create policy file: %v", err)
+	}
+
+	if err := os.WriteFile(resourcePolicyPath, []byte(resourcePolicyContent), 0600); err != nil {
+		t.Fatalf("Failed to create resource policy file: %v", err)
+	}
+
+	if err := os.WriteFile(scenarioPath, []byte(scenarioContent), 0600); err != nil {
+		t.Fatalf("Failed to create scenario file: %v", err)
+	}
+
+	// Use bytes.Buffer to capture debug output
+	var debugBuf bytes.Buffer
+
+	// Run with debug=true
+	_ = run(scenarioPath, "", false, false, true, &debugBuf)
+
+	output := debugBuf.String()
+
+	// Verify resource policy debug output
+	if !strings.Contains(output, "🔍 DEBUG: Loading resource policy from:") {
+		t.Errorf("Expected debug output for resource policy loading, got: %s", output)
+	}
+
+	if !strings.Contains(output, "🔍 DEBUG: Rendered resource policy (minified):") {
+		t.Errorf("Expected debug output for rendered resource policy, got: %s", output)
 	}
 }
