@@ -67,6 +67,7 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
 
 - **Test collection format**
   - `tests` array with named test cases
+  - Test-level context keys override scenario-level values
 
 - **SCP/RCP merging**
   - From multiple files/globs into permissions boundaries
