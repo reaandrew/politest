@@ -81,6 +81,7 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
 - **AWS IAM SimulateCustomPolicy integration**
 
   - Test policies before deployment
+  - Pretty-printed JSON for readable error messages with line numbers
 
 - **Expectation assertions**
 
