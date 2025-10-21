@@ -1303,40 +1303,6 @@ func TestFilterTestsByName(t *testing.T) {
 			wantNames:   []string{"Test 1", "Test 3"},
 		},
 		{
-			name: "filter by auto-generated name (unnamed test)",
-			input: []TestCase{
-				{Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*"},
-				{Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket/*"},
-			},
-			filterNames: "s3:GetObject on arn:aws:s3:::bucket/*",
-			vars:        map[string]any{},
-			wantLen:     1,
-			wantNames:   []string{""},
-		},
-		{
-			name: "mixed named and unnamed tests",
-			input: []TestCase{
-				{Name: "Named test", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket1/*"},
-				{Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket2/*"},
-				{Name: "Another named test", Action: "s3:ListBucket", Resource: "arn:aws:s3:::bucket3"},
-			},
-			filterNames: "Named test,s3:PutObject on arn:aws:s3:::bucket2/*",
-			vars:        map[string]any{},
-			wantLen:     2,
-			wantNames:   []string{"Named test", ""},
-		},
-		{
-			name: "template variables in test names",
-			input: []TestCase{
-				{Name: "Test with var", Action: "s3:GetObject", Resource: "arn:aws:s3:::{{.bucket_name}}/*"},
-				{Action: "s3:PutObject", Resource: "arn:aws:s3:::{{.bucket_name}}/*"},
-			},
-			filterNames: "s3:PutObject on arn:aws:s3:::my-bucket/*",
-			vars:        map[string]any{"bucket_name": "my-bucket"},
-			wantLen:     1,
-			wantNames:   []string{""},
-		},
-		{
 			name: "whitespace trimming in filter names",
 			input: []TestCase{
 				{Name: "Test 1", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*"},
@@ -1359,14 +1325,15 @@ func TestFilterTestsByName(t *testing.T) {
 			wantNames:   []string{},
 		},
 		{
-			name: "auto-generated name with Resources array",
+			name: "unnamed tests are not matched by filter",
 			input: []TestCase{
-				{Action: "s3:GetObject", Resources: []string{"arn:aws:s3:::bucket1/*", "arn:aws:s3:::bucket2/*"}},
+				{Name: "Named test", Action: "s3:GetObject", Resource: "arn:aws:s3:::bucket/*"},
+				{Action: "s3:PutObject", Resource: "arn:aws:s3:::bucket/*"}, // Unnamed - cannot be filtered
 			},
-			filterNames: "s3:GetObject on arn:aws:s3:::bucket1/*",
+			filterNames: "Named test",
 			vars:        map[string]any{},
 			wantLen:     1,
-			wantNames:   []string{""},
+			wantNames:   []string{"Named test"},
 		},
 	}
 

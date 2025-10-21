@@ -54,11 +54,12 @@ func RunTestCollection(client IAMSimulator, scen *Scenario, cfg SimulatorConfig)
 		expandedTests = filterTestsByName(expandedTests, cfg.TestFilter, cfg.Variables)
 		if len(expandedTests) == 0 {
 			fmt.Fprintf(os.Stderr, "Error: No tests matched filter: %s\n\n", cfg.TestFilter)
-			fmt.Fprintf(os.Stderr, "Available tests:\n")
+			fmt.Fprintf(os.Stderr, "Available named tests:\n")
 			allTests := expandTestsWithActions(scen.Tests)
 			for _, test := range allTests {
-				testName := getTestName(test, RenderString(test.Action, cfg.Variables), prepareTestResources(test, cfg.Variables))
-				fmt.Fprintf(os.Stderr, "  - %s\n", testName)
+				if test.Name != "" {
+					fmt.Fprintf(os.Stderr, "  - %s\n", test.Name)
+				}
 			}
 			GlobalExiter.Exit(1)
 		}
@@ -115,7 +116,8 @@ func expandTestsWithActions(tests []TestCase) []TestCase {
 	return expanded
 }
 
-// filterTestsByName filters tests to only include those matching the filter names
+// filterTestsByName filters tests to only include those with explicit names matching the filter
+// Tests without explicit names cannot be filtered and will not be included
 func filterTestsByName(tests []TestCase, filterNames string, vars map[string]any) []TestCase {
 	if filterNames == "" {
 		return tests
@@ -129,20 +131,8 @@ func filterTestsByName(tests []TestCase, filterNames string, vars map[string]any
 
 	var filtered []TestCase
 	for _, test := range tests {
-		// Generate test name (either explicit or auto-generated)
-		testName := test.Name
-		if testName == "" {
-			// Auto-generate name using same logic as getTestName
-			action := RenderString(test.Action, vars)
-			resources := prepareTestResources(test, vars)
-			resourceStr := "*"
-			if len(resources) > 0 {
-				resourceStr = resources[0]
-			}
-			testName = fmt.Sprintf("%s on %s", action, resourceStr)
-		}
-
-		if wantedNames[testName] {
+		// Only match tests with explicit names
+		if test.Name != "" && wantedNames[test.Name] {
 			filtered = append(filtered, test)
 		}
 	}
