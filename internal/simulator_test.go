@@ -1203,3 +1203,96 @@ func TestRunTestCollectionWithActionsArray(t *testing.T) {
 		t.Errorf("RunTestCollection() exited unexpectedly with code %d", mockExit.exitCode)
 	}
 }
+
+func TestExtractSidFromJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		stmtJSON string
+		want     string
+	}{
+		{
+			name:     "valid statement with Sid",
+			stmtJSON: `{"Sid": "DenyS3", "Effect": "Deny", "Action": "s3:*", "Resource": "*"}`,
+			want:     "DenyS3",
+		},
+		{
+			name:     "statement without Sid",
+			stmtJSON: `{"Effect": "Allow", "Action": "s3:*", "Resource": "*"}`,
+			want:     "",
+		},
+		{
+			name:     "invalid JSON",
+			stmtJSON: `not valid json`,
+			want:     "",
+		},
+		{
+			name:     "Sid is not a string",
+			stmtJSON: `{"Sid": 123, "Effect": "Deny"}`,
+			want:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractSidFromJSON(tt.stmtJSON)
+			if got != tt.want {
+				t.Errorf("extractSidFromJSON() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractStatementFromPolicy(t *testing.T) {
+	policyJSON := `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyS3",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": "*"
+    }
+  ]
+}`
+
+	tests := []struct {
+		name      string
+		start     *types.Position
+		end       *types.Position
+		wantEmpty bool
+	}{
+		{
+			name:  "extract multi line statement",
+			start: &types.Position{Line: 4, Column: 5},
+			end:   &types.Position{Line: 9, Column: 6},
+		},
+		{
+			name:      "nil start position",
+			start:     nil,
+			end:       &types.Position{Line: 5, Column: 10},
+			wantEmpty: true,
+		},
+		{
+			name:      "nil end position",
+			start:     &types.Position{Line: 5, Column: 10},
+			end:       nil,
+			wantEmpty: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractStatementFromPolicy(policyJSON, tt.start, tt.end)
+
+			if tt.wantEmpty {
+				if result != "" {
+					t.Errorf("extractStatementFromPolicy() = %v, want empty string", result)
+				}
+			} else {
+				if result == "" {
+					t.Error("extractStatementFromPolicy() returned empty string, want non-empty")
+				}
+			}
+		})
+	}
+}
