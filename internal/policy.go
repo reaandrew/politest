@@ -119,6 +119,72 @@ func MergeSCPFilesWithSourceMap(files []string) (map[string]any, map[string]*Pol
 	return merged, sourceMap
 }
 
+// ProcessIdentityPolicyWithSourceMap processes an identity policy JSON and returns it with tracking Sids injected
+// and a source map for each statement
+func ProcessIdentityPolicyWithSourceMap(policyJSON string, filePath string) (string, map[string]*PolicySource) {
+	// Read the original file content for line number tracking
+	fileContent, err := os.ReadFile(filePath)
+	Check(err)
+
+	// Parse the policy JSON
+	var policy map[string]any
+	if err := json.Unmarshal([]byte(policyJSON), &policy); err != nil {
+		Die("invalid JSON in identity policy: %v", err)
+	}
+
+	sourceMap := make(map[string]*PolicySource)
+
+	// Extract statements
+	var statements []any
+	if st, ok := policy["Statement"]; ok {
+		if stmtArray, ok := st.([]any); ok {
+			statements = stmtArray
+		} else {
+			statements = []any{st}
+		}
+	} else {
+		// No statements to track
+		return policyJSON, sourceMap
+	}
+
+	// Process each statement to inject tracking Sids
+	for idx, stmt := range statements {
+		if stmtMap, ok := stmt.(map[string]any); ok {
+			// Create tracking Sid
+			trackingSid := "identity#stmt:" + strconv.Itoa(idx)
+
+			// Store original Sid if it exists
+			originalSid := ""
+			if existingSid, ok := stmtMap["Sid"]; ok {
+				if sidStr, ok := existingSid.(string); ok {
+					originalSid = sidStr
+				}
+			}
+
+			// Find line numbers for this statement
+			startLine, endLine := findStatementLineNumbers(string(fileContent), stmtMap, idx)
+
+			// Inject tracking Sid
+			stmtMap["Sid"] = trackingSid
+
+			// Track source
+			sourceMap[trackingSid] = &PolicySource{
+				FilePath:  filePath,
+				Sid:       originalSid,
+				Index:     idx,
+				StartLine: startLine,
+				EndLine:   endLine,
+			}
+		}
+	}
+
+	// Re-serialize the modified policy
+	modifiedJSON, err := json.Marshal(policy)
+	Check(err)
+
+	return string(modifiedJSON), sourceMap
+}
+
 // findStatementLineNumbers finds the line numbers where a statement appears in the source file
 func findStatementLineNumbers(fileContent string, stmt map[string]any, stmtIndex int) (int, int) {
 	lines := strings.Split(fileContent, "\n")

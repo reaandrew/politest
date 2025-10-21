@@ -1431,14 +1431,17 @@ func TestDisplaySingleStatementIdentityPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	trackingSid := "identity#stmt:0"
 	sourceMap := &PolicySourceMap{
-		Identity: &PolicySource{
-			FilePath:  policyFile,
-			Sid:       "AllowS3",
-			StartLine: 4,
-			EndLine:   9,
+		Identity: map[string]*PolicySource{
+			trackingSid: {
+				FilePath:  policyFile,
+				Sid:       "AllowS3",
+				StartLine: 4,
+				EndLine:   9,
+			},
 		},
-		IdentityPolicyRaw: `{"Version":"2012-10-17","Statement":[{"Sid":"AllowS3","Effect":"Allow","Action":"s3:*","Resource":"*"}]}`,
+		IdentityPolicyRaw: `{"Version":"2012-10-17","Statement":[{"Sid":"identity#stmt:0","Effect":"Allow","Action":"s3:*","Resource":"*"}]}`,
 	}
 
 	cfg := SimulatorConfig{
@@ -1446,8 +1449,12 @@ func TestDisplaySingleStatementIdentityPolicy(t *testing.T) {
 	}
 
 	sourcePolicyID := "PolicyInputList.1"
+	line4, col5 := int32(4), int32(5)
+	line9, col6 := int32(9), int32(6)
 	stmt := types.Statement{
 		SourcePolicyId: &sourcePolicyID,
+		StartPosition:  &types.Position{Line: line4, Column: col5},
+		EndPosition:    &types.Position{Line: line9, Column: col6},
 	}
 
 	displaySingleStatement(stmt, cfg)

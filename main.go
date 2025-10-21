@@ -97,12 +97,14 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 
 	// Policy document: template or pre-rendered JSON
 	var policyJSON string
+	var identityPolicyPath string
 	switch {
 	case scen.PolicyJSON != "" && scen.PolicyTemplate != "":
 		return nil, fmt.Errorf("provide only one of 'policy_json' or 'policy_template'")
 	case scen.PolicyJSON != "":
 		base := filepath.Dir(absScenario)
 		p := internal.MustAbsJoin(base, scen.PolicyJSON)
+		identityPolicyPath = p
 		if debug {
 			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading policy from: %s\n", p)
 		}
@@ -114,6 +116,7 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 	case scen.PolicyTemplate != "":
 		base := filepath.Dir(absScenario)
 		tplPath := internal.MustAbsJoin(base, scen.PolicyTemplate)
+		identityPolicyPath = tplPath
 		if debug {
 			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading policy template from: %s\n", tplPath)
 		}
@@ -125,6 +128,10 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 	if debug {
 		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered policy (minified):\n%s\n", policyJSON)
 	}
+
+	// Process identity policy with source tracking (inject tracking Sids)
+	policyJSONWithTracking, identitySourceMap := internal.ProcessIdentityPolicyWithSourceMap(policyJSON, identityPolicyPath)
+	policyJSON = policyJSONWithTracking
 
 	// Merge SCPs (permissions boundary) with source tracking
 	var pbJSON string
@@ -185,26 +192,15 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 	if scpSourceMap == nil {
 		scpSourceMap = make(map[string]*internal.PolicySource)
 	}
+	if identitySourceMap == nil {
+		identitySourceMap = make(map[string]*internal.PolicySource)
+	}
 	sourceMap := &internal.PolicySourceMap{
+		Identity:               identitySourceMap,
 		PermissionsBoundary:    scpSourceMap,
 		PermissionsBoundaryRaw: pbJSON,
 		IdentityPolicyRaw:      policyJSON,
 		ResourcePolicyRaw:      resourcePolicyJSON,
-	}
-
-	// Track identity policy source if available
-	if scen.PolicyJSON != "" {
-		base := filepath.Dir(absScenario)
-		policyPath := internal.MustAbsJoin(base, scen.PolicyJSON)
-		sourceMap.Identity = &internal.PolicySource{
-			FilePath: policyPath,
-		}
-	} else if scen.PolicyTemplate != "" {
-		base := filepath.Dir(absScenario)
-		policyPath := internal.MustAbsJoin(base, scen.PolicyTemplate)
-		sourceMap.Identity = &internal.PolicySource{
-			FilePath: policyPath,
-		}
 	}
 
 	// Track resource policy source if available

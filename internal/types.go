@@ -54,8 +54,8 @@ type SimulatorConfig struct {
 
 // PolicySourceMap tracks the origin of policy statements
 type PolicySourceMap struct {
-	Identity               *PolicySource            // Identity policy source
-	PermissionsBoundary    map[string]*PolicySource // Map of Sid -> source for SCP/RCP statements
+	Identity               map[string]*PolicySource // Map of tracking Sid -> source for identity policy statements
+	PermissionsBoundary    map[string]*PolicySource // Map of tracking Sid -> source for SCP/RCP statements
 	ResourcePolicy         *PolicySource            // Resource policy source (scenario-level)
 	PermissionsBoundaryRaw string                   // Raw merged JSON sent to AWS
 	IdentityPolicyRaw      string                   // Raw identity policy JSON sent to AWS

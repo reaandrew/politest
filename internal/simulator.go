@@ -317,7 +317,16 @@ func displaySingleStatement(stmt types.Statement, cfg SimulatorConfig) {
 	// Determine which policy this statement came from
 	switch {
 	case strings.HasPrefix(sourcePolicyID, "PolicyInputList"):
-		source = cfg.SourceMap.Identity
+		// Look up specific identity policy statement by extracting Sid
+		policyJSON := cfg.SourceMap.IdentityPolicyRaw
+		if stmt.StartPosition != nil && stmt.EndPosition != nil && policyJSON != "" {
+			stmtJSON := extractStatementFromPolicy(policyJSON, stmt.StartPosition, stmt.EndPosition)
+			if trackingSid := extractSidFromJSON(stmtJSON); trackingSid != "" {
+				if src, ok := cfg.SourceMap.Identity[trackingSid]; ok {
+					source = src
+				}
+			}
+		}
 	case strings.HasPrefix(sourcePolicyID, "PermissionsBoundaryPolicyInputList"):
 		// Look up specific SCP statement by extracting Sid
 		policyJSON := cfg.SourceMap.PermissionsBoundaryRaw
