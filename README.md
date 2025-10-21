@@ -386,6 +386,46 @@ context:
 
 **Note:** IpAddress and IpAddressList types are not supported by the AWS SDK.
 
+**Context Override Behavior:**
+
+When both scenario-level and test-level context entries are defined:
+
+- Test-level context entries **override** scenario-level entries with the same `ContextKeyName`
+- Test-level context entries with **new** `ContextKeyName` values are **added** to the scenario context
+
+```yaml
+# Scenario-level context (default)
+context:
+  - ContextKeyName: "aws:SourceIp"
+    ContextKeyType: "string"
+    ContextKeyValues: ["10.0.1.0/24"]
+
+tests:
+  - name: "Uses scenario context"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    # No test-level context = uses scenario IP
+    expect: "allowed"
+
+  - name: "Overrides scenario context"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::bucket/*"
+    context:
+      - ContextKeyName: "aws:SourceIp"  # OVERRIDES scenario IP
+        ContextKeyType: "string"
+        ContextKeyValues: ["192.168.1.1"]
+    expect: "implicitDeny"
+
+  - name: "Adds to scenario context"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::bucket/*"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"  # ADDS MFA (keeps scenario IP)
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+    expect: "allowed"
+```
+
 ### SCP Merging
 
 Multiple SCP files are merged into a single permissions boundary:
