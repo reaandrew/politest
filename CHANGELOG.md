@@ -1,3 +1,31 @@
+## [3.0.0](https://github.com/reaandrew/politest/compare/v2.3.1...v3.0.0) (2025-10-21)
+
+### ⚠ BREAKING CHANGES
+
+* Refactor run() to extract prepareSimulation() function
+
+- Create prepareSimulation() function that handles all AWS-free preparation
+- This function loads scenarios, renders templates, processes variables
+- Unit tests now call prepareSimulation() instead of run()
+- Tests no longer attempt AWS API calls or require credentials
+- Tests run in ~3s instead of timing out waiting for AWS
+- Fixes CI test failures where AWS credentials are unavailable
+- Coverage: 89.2% overall (72.0% main, 96.1% internal)
+
+Integration tests in test/ directory still use full AWS workflow.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+### Features
+
+* add --debug flag to show file loading and template rendering ([2d32727](https://github.com/reaandrew/politest/commit/2d32727017bffb91f5d7004fd0c46cd552bb411a)), closes [#10](https://github.com/reaandrew/politest/issues/10)
+
+### Bug Fixes
+
+* separate AWS-free logic from AWS calls in tests ([4522bf8](https://github.com/reaandrew/politest/commit/4522bf8e02efc891f5edc8349d20a8c857c86580))
+
 ## [2.3.1](https://github.com/reaandrew/politest/compare/v2.3.0...v2.3.1) (2025-10-20)
 
 ### Bug Fixes
