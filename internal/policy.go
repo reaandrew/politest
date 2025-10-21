@@ -205,40 +205,40 @@ func findStatementLineNumbers(fileContent string, stmt map[string]any, stmtIndex
 
 	// Search for the key-value pair in the file
 	searchPattern := "\"" + searchKey + "\"" + ":" // Look for "Sid": or "Effect":
-	foundCount := 0
 	var startLine int
 
 	for i, line := range lines {
 		if strings.Contains(line, searchPattern) && strings.Contains(line, searchValue) {
-			if foundCount == stmtIndex {
-				// Found the right statement, now find its boundaries
-				// Search backwards for opening brace
-				for j := i; j >= 0; j-- {
-					trimmed := strings.TrimSpace(lines[j])
-					if trimmed == "{" {
-						startLine = j + 1 // 1-based line numbers
-						break
-					}
-				}
+			// Found the statement - since Sids are unique in a file, just use the first match
+			// (stmtIndex is only needed when the same Sid appears multiple times, like in merged SCPs)
 
-				// Search forwards for closing brace
-				braceCount := 0
-				foundOpen := false
-				for j := startLine - 1; j < len(lines); j++ {
-					for _, ch := range lines[j] {
-						if ch == '{' {
-							braceCount++
-							foundOpen = true
-						} else if ch == '}' {
-							braceCount--
-							if foundOpen && braceCount == 0 {
-								return startLine, j + 1 // 1-based line numbers
-							}
+			// Search backwards for opening brace
+			for j := i; j >= 0; j-- {
+				trimmed := strings.TrimSpace(lines[j])
+				if trimmed == "{" {
+					startLine = j + 1 // 1-based line numbers
+					break
+				}
+			}
+
+			// Search forwards for closing brace
+			braceCount := 0
+			foundOpen := false
+			for j := startLine - 1; j < len(lines); j++ {
+				for _, ch := range lines[j] {
+					if ch == '{' {
+						braceCount++
+						foundOpen = true
+					} else if ch == '}' {
+						braceCount--
+						if foundOpen && braceCount == 0 {
+							return startLine, j + 1 // 1-based line numbers
 						}
 					}
 				}
 			}
-			foundCount++
+			// If we get here, we found the Sid but couldn't find boundaries
+			break
 		}
 	}
 

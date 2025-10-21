@@ -1,0 +1,22 @@
+# FAILING TEST: Identity policy with MFA-based explicit deny
+# This test demonstrates the bug where identity policy failures show:
+# ✓ Sid (e.g., DenyEC2WithoutMFA)
+# ✗ Line numbers in source file
+# ✗ Statement content from source file
+#
+# After fix, should show complete source tracking like SCPs do
+
+policy_json: "../policies/identity-conditional-denies.json"
+
+tests:
+  - name: "TerminateInstances without MFA (should show statement source)"
+    action: "ec2:TerminateInstances"
+    resource: "*"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["false"]
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Engineering"]
+    expect: "allowed"  # WRONG - will be explicitDeny
