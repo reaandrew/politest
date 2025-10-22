@@ -1,7 +1,12 @@
-# Demo 7: Context Conditions
+# Demo 7: Context Conditions + SCP Boundary
 # Demonstrates how IAM condition keys control access with both passing and failing tests
+# Also shows how SCPs can block actions that policies would otherwise allow
 
 policy_json: "policies/conditional-policy.json"
+
+# Organization-level SCP blocks EC2 terminate operations
+scp_paths:
+  - "scp/deny-ec2-terminate.json"
 
 tests:
   # IP Address Condition Tests
@@ -107,3 +112,37 @@ tests:
         ContextKeyType: "boolean"
         ContextKeyValues: ["true"]
     expect: "allowed"
+
+  # SCP Boundary Tests - Policy allows but SCP blocks
+  - name: "StopInstances allowed by both policy and SCP"
+    action: "ec2:StopInstances"
+    resource: "*"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Engineering"]
+    expect: "allowed"
+
+  - name: "TerminateInstances with MFA + Engineering tag - BLOCKED BY SCP"
+    action: "ec2:TerminateInstances"
+    resource: "*"
+    context:
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Engineering"]
+    expect: "allowed"  # WRONG! SCP blocks this even though policy + conditions would allow it
+
+  - name: "DeleteVolume blocked by organization SCP"
+    action: "ec2:DeleteVolume"
+    resource: "*"
+    context:
+      - ContextKeyName: "aws:PrincipalTag/Department"
+        ContextKeyType: "string"
+        ContextKeyValues: ["Engineering"]
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+    expect: "allowed"  # WRONG! SCP denies this at org level regardless of conditions

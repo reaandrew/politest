@@ -47,6 +47,23 @@
       }
     },
     {
+      "Sid": "AllowEC2TerminateForEngineeringWithMFA",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:TerminateInstances",
+        "ec2:DeleteVolume"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalTag/Department": "Engineering"
+        },
+        "Bool": {
+          "aws:MultiFactorAuthPresent": "true"
+        }
+      }
+    },
+    {
       "Sid": "DenyS3DeleteOutsideBusinessHours",
       "Effect": "Deny",
       "Action": "s3:DeleteBucket",
