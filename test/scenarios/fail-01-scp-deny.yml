@@ -13,6 +13,7 @@
 policy_json: "../policies/allow-s3.json"
 
 scp_paths:
+  - "../scp/permissive.json"
   - "../scp/deny-s3.json"
 
 tests:

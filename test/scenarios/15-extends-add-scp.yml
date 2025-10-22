@@ -5,6 +5,7 @@ extends: "14-base-with-variables.yml"
 
 # Add SCP that denies S3 writes
 scp_paths:
+  - "../scp/permissive.json"
   - "../scp/deny-s3-write.json"
 
 # Override expectations - writes now denied by SCP

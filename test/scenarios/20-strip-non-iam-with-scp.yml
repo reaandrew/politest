@@ -3,6 +3,7 @@
 
 policy_json: "../policies/allow-s3-with-metadata.json"
 scp_paths:
+  - "../scp/permissive.json"
   - "../scp/deny-s3-delete-with-metadata.json"
 
 tests:
