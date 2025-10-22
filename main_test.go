@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -759,5 +760,79 @@ tests:
 
 	if !strings.Contains(output, "🔍 DEBUG: Rendered resource policy (pretty-printed):") {
 		t.Errorf("Expected debug output for rendered resource policy, got: %s", output)
+	}
+}
+func TestPrepareSimulationInvalidPolicyJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create invalid JSON policy file
+	policyFile := filepath.Join(tmpDir, "policy.json")
+	if err := os.WriteFile(policyFile, []byte(`{this is not valid json}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create scenario file
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+	scenarioContent := `policy_json: "policy.json"
+tests:
+  - action: "s3:GetObject"
+    resource: "*"
+    expect: "allowed"
+`
+	if err := os.WriteFile(scenarioPath, []byte(scenarioContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt to prepare simulation - should fail with JSON error
+	_, err := prepareSimulation(scenarioPath, false, false, os.Stdout)
+	if err == nil {
+		t.Fatal("Expected error for invalid JSON, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid JSON in policy file") {
+		t.Errorf("Expected 'invalid JSON in policy file' error, got: %v", err)
+	}
+}
+
+func TestPrepareSimulationInvalidResourcePolicyJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create valid policy file
+	policyFile := filepath.Join(tmpDir, "policy.json")
+	policyContent := `{
+  "Version": "2012-10-17",
+  "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}]
+}`
+	if err := os.WriteFile(policyFile, []byte(policyContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create invalid JSON resource policy file
+	resourcePolicyFile := filepath.Join(tmpDir, "resource-policy.json")
+	if err := os.WriteFile(resourcePolicyFile, []byte(`{this is not valid json}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create scenario file
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+	scenarioContent := `policy_json: "policy.json"
+resource_policy_json: "resource-policy.json"
+tests:
+  - action: "s3:GetObject"
+    resource: "*"
+    expect: "allowed"
+`
+	if err := os.WriteFile(scenarioPath, []byte(scenarioContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt to prepare simulation - should fail with JSON error
+	_, err := prepareSimulation(scenarioPath, false, false, os.Stdout)
+	if err == nil {
+		t.Fatal("Expected error for invalid JSON, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid JSON in resource policy file") {
+		t.Errorf("Expected 'invalid JSON in resource policy file' error, got: %v", err)
 	}
 }

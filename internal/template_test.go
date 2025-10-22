@@ -554,3 +554,37 @@ func TestRenderStringWithMixedVars(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderTemplateFileJSONInvalidJSON(t *testing.T) {
+	// Save original exiter
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	// Set mock exiter
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	tmpDir := t.TempDir()
+	templateFile := filepath.Join(tmpDir, "invalid.json.tpl")
+
+	// Template that produces invalid JSON after rendering
+	templateContent := `{this is not valid json: {{.value}}}`
+	if err := os.WriteFile(templateFile, []byte(templateContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	vars := map[string]any{
+		"value": "test",
+	}
+
+	// Should call Die() due to invalid JSON
+	_ = RenderTemplateFileJSON(templateFile, vars)
+
+	// Verify Die was called
+	if !mockExit.called {
+		t.Error("RenderTemplateFileJSON() did not call Die() on invalid JSON")
+	}
+	if mockExit.exitCode != 1 {
+		t.Errorf("RenderTemplateFileJSON() called Exit with code %d, want 1", mockExit.exitCode)
+	}
+}
