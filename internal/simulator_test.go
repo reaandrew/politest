@@ -2149,7 +2149,7 @@ func TestDisplayMatchedStatementsEmpty(t *testing.T) {
 func TestFilterTestsByNameWithTemplateVariables(t *testing.T) {
 	tests := []TestCase{
 		{
-			Name:     "Test with rendered vars",
+			Name:     "Test with {{.bucket_name}}/{{.prefix}}",
 			Action:   "s3:GetObject",
 			Resource: "arn:aws:s3:::{{.bucket_name}}/{{.prefix}}/*",
 		},
@@ -2164,15 +2164,21 @@ func TestFilterTestsByNameWithTemplateVariables(t *testing.T) {
 		"prefix":      "data",
 	}
 
-	// Filter by auto-generated name with variables rendered
-	result := filterTestsByName(tests, "s3:PutObject on arn:aws:s3:::my-bucket/data/*", vars)
+	// Filter by explicit name with template variables (should NOT be rendered in filter matching)
+	result := filterTestsByName(tests, "Test with {{.bucket_name}}/{{.prefix}}", vars)
 
 	if len(result) != 1 {
 		t.Errorf("filterTestsByName() returned %d tests, want 1", len(result))
 	}
 
-	if result[0].Action != "s3:PutObject" {
+	if result[0].Action != "s3:GetObject" {
 		t.Errorf("filterTestsByName() returned wrong test, got action %q", result[0].Action)
+	}
+
+	// Verify that tests without explicit names cannot be filtered (design decision)
+	resultAutoName := filterTestsByName(tests, "s3:PutObject on arn:aws:s3:::my-bucket/data/*", vars)
+	if len(resultAutoName) != 0 {
+		t.Errorf("filterTestsByName() should not match auto-generated names, got %d tests, want 0", len(resultAutoName))
 	}
 }
 
