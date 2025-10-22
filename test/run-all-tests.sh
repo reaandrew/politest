@@ -23,13 +23,13 @@ else
     exit 1
 fi
 
-# Run strict-policy flag tests
-echo -e "${YELLOW}Running --strict-policy flag tests...${NC}"
-if bash "$SCRIPT_DIR/test-strict-policy.sh"; then
-    echo -e "${GREEN}✓ Strict-policy tests passed${NC}"
+# Run failure scenario tests (scenarios expected to fail)
+echo -e "${YELLOW}Running failure scenario tests...${NC}"
+if bash "$SCRIPT_DIR/test-failures.sh"; then
+    echo -e "${GREEN}✓ Failure scenario tests passed${NC}"
     echo ""
 else
-    echo -e "${RED}✗ Strict-policy tests failed${NC}"
+    echo -e "${RED}✗ Failure scenario tests failed${NC}"
     exit 1
 fi
 

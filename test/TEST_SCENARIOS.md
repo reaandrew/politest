@@ -43,6 +43,13 @@ Contains YAML test scenario files numbered sequentially:
 - **20-strip-non-iam-with-scp.yml** - Strip non-IAM fields from both identity policy and SCP
 - **21-strip-resource-policy-metadata.yml** - Strip non-IAM fields from resource policies
 
+#### Failure Scenarios (fail-*)
+These scenarios are **expected to fail** when run with specific flags. All failure scenarios are prefixed with `fail-`.
+
+- **fail-strict-policy-identity.yml** - Fails with --strict-policy: identity policy contains non-IAM fields
+- **fail-strict-policy-resource.yml** - Fails with --strict-policy: resource policy contains non-IAM fields
+- **fail-strict-policy-scp.yml** - Fails with --strict-policy: SCP contains non-IAM fields
+
 ### Policy Files (`policies/`, `scp/`, `rcp/`)
 
 Test policy documents used by scenarios:
@@ -80,23 +87,24 @@ bash run-tests.sh
 
 This runs scenarios 01-21 with default behavior (strips non-IAM fields silently).
 
-### Run Strict Policy Tests
+### Run Failure Scenario Tests
 ```bash
 cd test
-bash test-strict-policy.sh
+bash test-failures.sh
 ```
 
-Tests the `--strict-policy` flag:
-- Should **fail** when policies contain non-IAM fields
-- Should **succeed** when policies contain only valid IAM fields
+Runs scenarios prefixed with `fail-*` that are **expected to fail**:
+- Tests `--strict-policy` flag with policies containing non-IAM fields
+- Verifies proper error messages are returned
+- All fail scenarios must have the `fail-` prefix
 
-### Run All Tests (Standard + Strict)
+### Run All Tests (Standard + Failures)
 ```bash
 cd test
 bash run-all-tests.sh
 ```
 
-Runs both standard integration tests and strict-policy tests.
+Runs both standard integration tests (01-21) and failure scenarios (fail-*).
 
 ## Non-IAM Field Stripping Feature
 
@@ -131,7 +139,7 @@ The non-IAM stripping tests cover:
 - ✅ Identity policies with metadata (scenario 19)
 - ✅ SCPs with metadata (scenario 20)
 - ✅ Resource policies with metadata (scenario 21)
-- ✅ Strict mode validation (test-strict-policy.sh)
+- ✅ Strict mode validation via fail scenarios (fail-strict-policy-*.yml)
 
 ## Prerequisites
 
