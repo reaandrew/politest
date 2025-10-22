@@ -981,9 +981,9 @@ func TestResolveResourcePolicyWithJSON(t *testing.T) {
 		t.Errorf("resolveResourcePolicy() produced invalid JSON: %v", err)
 	}
 
-	// Verify it's minified (no whitespace)
-	if strings.Contains(result, "\n") || strings.Contains(result, "  ") {
-		t.Error("resolveResourcePolicy() should return minified JSON")
+	// Verify it's pretty-printed (has whitespace)
+	if !strings.Contains(result, "\n") || !strings.Contains(result, "  ") {
+		t.Error("resolveResourcePolicy() should return pretty-printed JSON")
 	}
 }
 
@@ -1061,6 +1061,48 @@ func TestResolveResourcePolicyWithScenarioDefault(t *testing.T) {
 
 	if result != scenarioResourcePolicy {
 		t.Errorf("resolveResourcePolicy() = %v, want scenario default %v", result, scenarioResourcePolicy)
+	}
+}
+
+func TestResolveResourcePolicyInvalidJSON(t *testing.T) {
+	// Save original exiter
+	originalExiter := GlobalExiter
+	defer func() { GlobalExiter = originalExiter }()
+
+	// Set mock exiter
+	mockExit := &mockExiter{}
+	GlobalExiter = mockExit
+
+	tmpDir := t.TempDir()
+	scenarioPath := filepath.Join(tmpDir, "scenario.yml")
+
+	// Create invalid JSON resource policy file
+	resourcePolicyFile := filepath.Join(tmpDir, "resource-policy.json")
+	if err := os.WriteFile(resourcePolicyFile, []byte(`{this is not valid json}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test case with test-level resource policy JSON
+	test := TestCase{
+		Action:             "s3:GetObject",
+		Resource:           "arn:aws:s3:::bucket/*",
+		ResourcePolicyJSON: "resource-policy.json",
+	}
+
+	cfg := SimulatorConfig{
+		ScenarioPath: scenarioPath,
+		Variables:    map[string]any{},
+	}
+
+	// Should call Die() due to invalid JSON
+	_ = resolveResourcePolicy(test, cfg, 0)
+
+	// Verify Die was called
+	if !mockExit.called {
+		t.Error("resolveResourcePolicy() did not call Die() on invalid JSON")
+	}
+	if mockExit.exitCode != 1 {
+		t.Errorf("resolveResourcePolicy() called Exit with code %d, want 1", mockExit.exitCode)
 	}
 }
 

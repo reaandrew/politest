@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -41,7 +42,7 @@ func RenderStringSlice(in []string, vars map[string]any) []string {
 	return out
 }
 
-// RenderTemplateFileJSON reads a template file, renders it, and returns minified JSON
+// RenderTemplateFileJSON reads a template file, renders it, and returns pretty-printed JSON
 func RenderTemplateFileJSON(path string, vars map[string]any) string {
 	tplText, err := os.ReadFile(path)
 	Check(err)
@@ -50,8 +51,12 @@ func RenderTemplateFileJSON(path string, vars map[string]any) string {
 	tpl := template.Must(template.New(filepath.Base(path)).Option("missingkey=error").Parse(preprocessed))
 	var buf bytes.Buffer
 	Check(tpl.Execute(&buf, vars))
-	// Validate and minify JSON
-	return MinifyJSON(buf.Bytes())
+	// Validate and format JSON
+	var jsonData any
+	if err := json.Unmarshal(buf.Bytes(), &jsonData); err != nil {
+		Die("invalid JSON in template %s: %v", path, err)
+	}
+	return ToJSONPretty(jsonData)
 }
 
 // RenderTemplateString renders a template string with the given variables
