@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Id": "S3PolicyWithMetadata",
+  "Description": "This is a non-IAM field that should be stripped",
+  "Author": "DevOps Team",
+  "LastModified": "2025-10-22",
+  "Tags": ["production", "s3-access"],
+  "Documentation": "https://example.com/docs/s3-policy",
+  "Statement": [
+    {
+      "Sid": "AllowS3ReadWrite",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket"
+      ],
+      "Resource": "*",
+      "Comment": "This comment field should also be stripped",
+      "Owner": "platform-team"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+# Test: Policy with non-IAM fields - default behavior (strip silently)
+# Expected: Non-IAM fields are automatically stripped, tests pass
+
+policy_json: "../policies/allow-s3-with-metadata.json"
+
+tests:
+  - name: "GetObject should be allowed (policy has metadata fields stripped)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"
+
+  - name: "PutObject should be allowed"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"
+
+  - name: "ListBucket should be allowed"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::test-bucket"
+    expect: "allowed"
+
+  - name: "DeleteObject should be denied (not in policy)"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "implicitDeny"
