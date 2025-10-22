@@ -49,7 +49,24 @@ func RunTestCollection(client IAMSimulator, scen *Scenario, cfg SimulatorConfig)
 	// Expand tests with actions array into individual tests
 	expandedTests := expandTestsWithActions(scen.Tests)
 
-	fmt.Printf("Running %d test(s)...\n\n", len(expandedTests))
+	// Filter tests if --test flag provided
+	if cfg.TestFilter != "" {
+		expandedTests = filterTestsByName(expandedTests, cfg.TestFilter, cfg.Variables)
+		if len(expandedTests) == 0 {
+			fmt.Fprintf(os.Stderr, "Error: No tests matched filter: %s\n\n", cfg.TestFilter)
+			fmt.Fprintf(os.Stderr, "Available named tests:\n")
+			allTests := expandTestsWithActions(scen.Tests)
+			for _, test := range allTests {
+				if test.Name != "" {
+					fmt.Fprintf(os.Stderr, "  - %s\n", test.Name)
+				}
+			}
+			GlobalExiter.Exit(1)
+		}
+		fmt.Printf("Running %d of %d test(s) (filtered)\n\n", len(expandedTests), len(scen.Tests))
+	} else {
+		fmt.Printf("Running %d test(s)...\n\n", len(expandedTests))
+	}
 
 	for i, test := range expandedTests {
 		pass, resp := runSingleTest(client, scen, cfg, test, i, len(expandedTests))
@@ -97,6 +114,30 @@ func expandTestsWithActions(tests []TestCase) []TestCase {
 	}
 
 	return expanded
+}
+
+// filterTestsByName filters tests to only include those with explicit names matching the filter
+// Tests without explicit names cannot be filtered and will not be included
+func filterTestsByName(tests []TestCase, filterNames string, vars map[string]any) []TestCase {
+	if filterNames == "" {
+		return tests
+	}
+
+	// Parse comma-separated names
+	wantedNames := make(map[string]bool)
+	for _, name := range strings.Split(filterNames, ",") {
+		wantedNames[strings.TrimSpace(name)] = true
+	}
+
+	var filtered []TestCase
+	for _, test := range tests {
+		// Only match tests with explicit names
+		if test.Name != "" && wantedNames[test.Name] {
+			filtered = append(filtered, test)
+		}
+	}
+
+	return filtered
 }
 
 // runSingleTest executes a single test case and returns pass/fail status and response

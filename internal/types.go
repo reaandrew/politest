@@ -46,6 +46,7 @@ type SimulatorConfig struct {
 	PermissionsBoundary string
 	ResourcePolicyJSON  string
 	ScenarioPath        string // Only used by RunTestCollection
+	TestFilter          string
 	Variables           map[string]any
 	SavePath            string
 	NoAssert            bool
