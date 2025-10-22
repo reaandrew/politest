@@ -1,3 +1,9 @@
+## [3.3.0](https://github.com/reaandrew/politest/compare/v3.2.0...v3.3.0) (2025-10-22)
+
+### Features
+
+* support context key override at test level ([#19](https://github.com/reaandrew/politest/issues/19)) ([c694198](https://github.com/reaandrew/politest/commit/c694198a337ab647085df007d2904a4243b4b10f)), closes [#11](https://github.com/reaandrew/politest/issues/11)
+
 ## [3.2.0](https://github.com/reaandrew/politest/compare/v3.1.0...v3.2.0) (2025-10-22)
 
 ### Features
