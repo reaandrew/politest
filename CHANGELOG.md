@@ -1,3 +1,9 @@
+## [3.2.0](https://github.com/reaandrew/politest/compare/v3.1.0...v3.2.0) (2025-10-22)
+
+### Features
+
+* show matched statement source and JSON on test failures ([#22](https://github.com/reaandrew/politest/issues/22)) ([cea0765](https://github.com/reaandrew/politest/commit/cea07651abfaabd9a9c8efb2e8e7cfcdc10575e5))
+
 ## [3.1.0](https://github.com/reaandrew/politest/compare/v3.0.0...v3.1.0) (2025-10-21)
 
 ### Features
