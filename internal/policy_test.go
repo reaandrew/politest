@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -422,5 +423,156 @@ func TestMergeSCPFilesWithMultipleStatements(t *testing.T) {
 	}
 	if len(statements) != 3 {
 		t.Errorf("Expected 3 statements, got %d", len(statements))
+	}
+}
+
+func TestMergeSCPFilesWithSourceMap(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	scp1 := filepath.Join(tmpDir, "deny-s3.json")
+	scp1Content := `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyS3",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": "*"
+    }
+  ]
+}`
+	if err := os.WriteFile(scp1, []byte(scp1Content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	merged, sourceMap := MergeSCPFilesWithSourceMap([]string{scp1})
+
+	// Verify merged policy structure
+	statements := merged["Statement"].([]any)
+	if len(statements) != 1 {
+		t.Fatalf("Expected 1 statement, got %d", len(statements))
+	}
+
+	// Verify statement has tracking Sid injected
+	stmt := statements[0].(map[string]any)
+	trackingSid, ok := stmt["Sid"].(string)
+	if !ok || trackingSid == "" {
+		t.Fatal("Statement missing tracking Sid")
+	}
+
+	// Verify tracking Sid follows expected format
+	if !strings.HasPrefix(trackingSid, "scp:deny-s3.json#stmt:") {
+		t.Errorf("Tracking Sid has unexpected format: %s", trackingSid)
+	}
+
+	// Verify source map entry exists
+	source, ok := sourceMap[trackingSid]
+	if !ok {
+		t.Fatal("Source map missing entry for tracking Sid")
+	}
+
+	// Verify original Sid is preserved
+	if source.Sid != "DenyS3" {
+		t.Errorf("Original Sid = %v, want DenyS3", source.Sid)
+	}
+
+	// Verify file path
+	if source.FilePath != scp1 {
+		t.Errorf("FilePath = %v, want %v", source.FilePath, scp1)
+	}
+
+	// Verify line numbers were tracked
+	if source.StartLine == 0 || source.EndLine == 0 {
+		t.Errorf("Line numbers not tracked: StartLine=%d, EndLine=%d", source.StartLine, source.EndLine)
+	}
+}
+
+func TestFindStatementLineNumbers(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		stmt      map[string]any
+		stmtIndex int
+		wantStart int
+		wantEnd   int
+	}{
+		{
+			name: "find by Sid",
+			content: `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyS3",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": "*"
+    }
+  ]
+}`,
+			stmt:      map[string]any{"Sid": "DenyS3", "Effect": "Deny"},
+			stmtIndex: 0,
+			wantStart: 4,
+			wantEnd:   9,
+		},
+		{
+			name: "find by Effect when no Sid",
+			content: `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "*"
+    }
+  ]
+}`,
+			stmt:      map[string]any{"Effect": "Allow"},
+			stmtIndex: 0,
+			wantStart: 4,
+			wantEnd:   8,
+		},
+		{
+			name: "statement without explicit braces",
+			content: `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Deny",
+      "Action": "s3:*"
+    }
+  ]
+}`,
+			stmt:      map[string]any{"Effect": "Deny"},
+			stmtIndex: 0,
+			wantStart: 4,
+			wantEnd:   7,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			startLine, endLine := findStatementLineNumbers(tt.content, tt.stmt, tt.stmtIndex)
+
+			if startLine != tt.wantStart {
+				t.Errorf("startLine = %d, want %d", startLine, tt.wantStart)
+			}
+			if endLine != tt.wantEnd {
+				t.Errorf("endLine = %d, want %d", endLine, tt.wantEnd)
+			}
+		})
+	}
+}
+
+func TestFindStatementLineNumbersNoMatch(t *testing.T) {
+	content := `{
+  "Version": "2012-10-17",
+  "Statement": []
+}`
+	stmt := map[string]any{"Sid": "NonExistent"}
+
+	startLine, endLine := findStatementLineNumbers(content, stmt, 0)
+
+	if startLine != 0 || endLine != 0 {
+		t.Errorf("Expected (0, 0) for no match, got (%d, %d)", startLine, endLine)
 	}
 }

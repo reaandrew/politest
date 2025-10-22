@@ -40,6 +40,7 @@ type simulationPrep struct {
 	resourcePolicyJSON  string
 	variables           map[string]any
 	absScenarioPath     string
+	sourceMap           *internal.PolicySourceMap
 }
 
 // prepareSimulation loads and prepares all data for simulation WITHOUT contacting AWS
@@ -96,12 +97,14 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 
 	// Policy document: template or pre-rendered JSON
 	var policyJSON string
+	var identityPolicyPath string
 	switch {
 	case scen.PolicyJSON != "" && scen.PolicyTemplate != "":
 		return nil, fmt.Errorf("provide only one of 'policy_json' or 'policy_template'")
 	case scen.PolicyJSON != "":
 		base := filepath.Dir(absScenario)
 		p := internal.MustAbsJoin(base, scen.PolicyJSON)
+		identityPolicyPath = p
 		if debug {
 			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading policy from: %s\n", p)
 		}
@@ -113,6 +116,7 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 	case scen.PolicyTemplate != "":
 		base := filepath.Dir(absScenario)
 		tplPath := internal.MustAbsJoin(base, scen.PolicyTemplate)
+		identityPolicyPath = tplPath
 		if debug {
 			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading policy template from: %s\n", tplPath)
 		}
@@ -125,8 +129,13 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered policy (minified):\n%s\n", policyJSON)
 	}
 
-	// Merge SCPs (permissions boundary)
+	// Process identity policy with source tracking (inject tracking Sids)
+	policyJSONWithTracking, identitySourceMap := internal.ProcessIdentityPolicyWithSourceMap(policyJSON, identityPolicyPath)
+	policyJSON = policyJSONWithTracking
+
+	// Merge SCPs (permissions boundary) with source tracking
 	var pbJSON string
+	var scpSourceMap map[string]*internal.PolicySource
 	if len(scen.SCPPaths) > 0 {
 		files := internal.ExpandGlobsRelative(filepath.Dir(absScenario), scen.SCPPaths)
 		if debug {
@@ -135,7 +144,8 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 				fmt.Fprintf(debugWriter, "  - %s\n", f)
 			}
 		}
-		merged := internal.MergeSCPFiles(files)
+		merged, sourceMap := internal.MergeSCPFilesWithSourceMap(files)
+		scpSourceMap = sourceMap
 		pbJSON = internal.ToJSONMin(merged)
 
 		// Warn that SCP simulation is an approximation (unless suppressed)
@@ -178,6 +188,36 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		return nil, fmt.Errorf("scenario must include 'tests' array with at least one test case")
 	}
 
+	// Build source map for tracking policy origins
+	if scpSourceMap == nil {
+		scpSourceMap = make(map[string]*internal.PolicySource)
+	}
+	if identitySourceMap == nil {
+		identitySourceMap = make(map[string]*internal.PolicySource)
+	}
+	sourceMap := &internal.PolicySourceMap{
+		Identity:               identitySourceMap,
+		PermissionsBoundary:    scpSourceMap,
+		PermissionsBoundaryRaw: pbJSON,
+		IdentityPolicyRaw:      policyJSON,
+		ResourcePolicyRaw:      resourcePolicyJSON,
+	}
+
+	// Track resource policy source if available
+	if scen.ResourcePolicyJSON != "" {
+		base := filepath.Dir(absScenario)
+		policyPath := internal.MustAbsJoin(base, scen.ResourcePolicyJSON)
+		sourceMap.ResourcePolicy = &internal.PolicySource{
+			FilePath: policyPath,
+		}
+	} else if scen.ResourcePolicyTemplate != "" {
+		base := filepath.Dir(absScenario)
+		policyPath := internal.MustAbsJoin(base, scen.ResourcePolicyTemplate)
+		sourceMap.ResourcePolicy = &internal.PolicySource{
+			FilePath: policyPath,
+		}
+	}
+
 	return &simulationPrep{
 		scenario:            scen,
 		policyJSON:          policyJSON,
@@ -185,11 +225,12 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		resourcePolicyJSON:  resourcePolicyJSON,
 		variables:           allVars,
 		absScenarioPath:     absScenario,
+		sourceMap:           sourceMap,
 	}, nil
 }
 
 // run contains the main application logic and returns an error instead of calling Die()
-func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWriter io.Writer) error {
+func run(scenarioPath, savePath string, noAssert, noWarn, debug, showMatchedSuccess bool, debugWriter io.Writer) error {
 	// Prepare simulation data (AWS-free)
 	prep, err := prepareSimulation(scenarioPath, noWarn, debug, debugWriter)
 	if err != nil {
@@ -212,6 +253,8 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 		Variables:           prep.variables,
 		SavePath:            savePath,
 		NoAssert:            noAssert,
+		ShowMatchedSuccess:  showMatchedSuccess,
+		SourceMap:           prep.sourceMap,
 	}
 
 	// Run tests
@@ -221,12 +264,13 @@ func run(scenarioPath, savePath string, noAssert, noWarn, debug bool, debugWrite
 
 // cliFlags holds the parsed command-line flags
 type cliFlags struct {
-	scenarioPath string
-	savePath     string
-	noAssert     bool
-	noWarn       bool
-	showVersion  bool
-	debug        bool
+	scenarioPath       string
+	savePath           string
+	noAssert           bool
+	noWarn             bool
+	showVersion        bool
+	debug              bool
+	showMatchedSuccess bool
 }
 
 // parseFlags parses command-line arguments and returns flags or error
@@ -240,6 +284,7 @@ func parseFlags(args []string) (*cliFlags, []string, error) {
 	fs.BoolVar(&flags.noAssert, "no-assert", false, "Do not fail on expectation mismatches")
 	fs.BoolVar(&flags.noWarn, "no-warn", false, "Suppress SCP/RCP simulation approximation warning")
 	fs.BoolVar(&flags.debug, "debug", false, "Show debug output (files loaded, variables, rendered policies)")
+	fs.BoolVar(&flags.showMatchedSuccess, "show-matched-success", false, "Show matched statements for passing tests")
 	fs.BoolVar(&flags.showVersion, "version", false, "Show version information and exit")
 
 	if err := fs.Parse(args); err != nil {
@@ -282,7 +327,7 @@ func realMain(args []string) int {
 	}
 
 	// Run main logic
-	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn, flags.debug, os.Stdout); err != nil {
+	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn, flags.debug, flags.showMatchedSuccess, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}

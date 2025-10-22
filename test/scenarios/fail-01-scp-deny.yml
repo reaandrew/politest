@@ -1,0 +1,45 @@
+# Test scenario designed to fail - verifies enhanced failure output shows:
+# - Expected decision
+# - Action being tested
+# - Resource(s)
+# - Context keys (if present)
+# - Got decision
+# - Matched statements with original Sids
+# - Line numbers in source files
+# - Context lines from source files
+#
+# Run with: go run . --scenario test/scenarios/99-verify-failure-output.yml --no-assert
+
+policy_json: "../policies/allow-s3.json"
+
+scp_paths:
+  - "../scp/deny-s3.json"
+
+tests:
+  # Test 1: Simple failure with SCP deny
+  - name: "Basic S3 access (will fail due to SCP)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::test-bucket/data.txt"
+    expect: "allowed"  # Wrong expectation - will actually be explicitDeny
+
+  # Test 2: Failure with context keys
+  - name: "S3 access with IP condition (will fail due to SCP)"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::secure-bucket/*"
+    context:
+      - ContextKeyName: "aws:SourceIp"
+        ContextKeyType: "string"
+        ContextKeyValues: ["10.0.1.50"]
+      - ContextKeyName: "aws:MultiFactorAuthPresent"
+        ContextKeyType: "boolean"
+        ContextKeyValues: ["true"]
+    expect: "allowed"  # Wrong expectation - will actually be explicitDeny
+
+  # Test 3: Multiple resources
+  - name: "S3 access to multiple buckets (will fail due to SCP)"
+    action: "s3:ListBucket"
+    resources:
+      - "arn:aws:s3:::bucket1"
+      - "arn:aws:s3:::bucket2"
+      - "arn:aws:s3:::bucket3"
+    expect: "allowed"  # Wrong expectation - will actually be explicitDeny

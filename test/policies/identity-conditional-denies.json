@@ -1,0 +1,59 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowS3WriteWithMFA",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::secure-bucket/*",
+      "Condition": {
+        "Bool": {
+          "aws:MultiFactorAuthPresent": "true"
+        }
+      }
+    },
+    {
+      "Sid": "AllowEC2ForEngineeringDept",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:StartInstances",
+        "ec2:StopInstances",
+        "ec2:TerminateInstances"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalTag/Department": "Engineering"
+        }
+      }
+    },
+    {
+      "Sid": "DenyS3DeleteFromUntrustedNetwork",
+      "Effect": "Deny",
+      "Action": "s3:DeleteObject",
+      "Resource": "*",
+      "Condition": {
+        "NotIpAddress": {
+          "aws:SourceIp": "10.0.1.0/24"
+        }
+      }
+    },
+    {
+      "Sid": "DenyEC2WithoutMFA",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:TerminateInstances",
+        "ec2:DeleteVolume"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "BoolIfExists": {
+          "aws:MultiFactorAuthPresent": "false"
+        }
+      }
+    }
+  ]
+}

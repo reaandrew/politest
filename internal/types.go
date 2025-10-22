@@ -49,4 +49,25 @@ type SimulatorConfig struct {
 	Variables           map[string]any
 	SavePath            string
 	NoAssert            bool
+	ShowMatchedSuccess  bool             // Show matched statements for passing tests
+	SourceMap           *PolicySourceMap // Tracks where statements came from
+}
+
+// PolicySourceMap tracks the origin of policy statements
+type PolicySourceMap struct {
+	Identity               map[string]*PolicySource // Map of tracking Sid -> source for identity policy statements
+	PermissionsBoundary    map[string]*PolicySource // Map of tracking Sid -> source for SCP/RCP statements
+	ResourcePolicy         *PolicySource            // Resource policy source (scenario-level)
+	PermissionsBoundaryRaw string                   // Raw merged JSON sent to AWS
+	IdentityPolicyRaw      string                   // Raw identity policy JSON sent to AWS
+	ResourcePolicyRaw      string                   // Raw resource policy JSON sent to AWS
+}
+
+// PolicySource tracks where a policy or statement originated
+type PolicySource struct {
+	FilePath  string // Original file path
+	Sid       string // Original Statement ID (before tracking Sid injection)
+	Index     int    // Statement index in original file
+	StartLine int    // Line number where statement starts in source file (1-based)
+	EndLine   int    // Line number where statement ends in source file (1-based)
 }

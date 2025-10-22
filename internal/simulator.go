@@ -119,7 +119,7 @@ func runSingleTest(client IAMSimulator, scen *Scenario, cfg SimulatorConfig, tes
 	Check(err)
 
 	// Evaluate result
-	pass := evaluateTestResult(resp, test, action, resources)
+	pass := evaluateTestResult(resp, test, action, resources, cfg)
 	return pass, resp
 }
 
@@ -232,7 +232,7 @@ func applyTestOverrides(input *iam.SimulateCustomPolicyInput, scen *Scenario, te
 }
 
 // evaluateTestResult checks the API response against expectations and prints result
-func evaluateTestResult(resp *iam.SimulateCustomPolicyOutput, test TestCase, action string, resources []string) bool {
+func evaluateTestResult(resp *iam.SimulateCustomPolicyOutput, test TestCase, action string, resources []string, cfg SimulatorConfig) bool {
 	if len(resp.EvaluationResults) == 0 {
 		fmt.Printf("  ✗ FAIL: no evaluation results returned\n\n")
 		return false
@@ -248,25 +248,233 @@ func evaluateTestResult(resp *iam.SimulateCustomPolicyOutput, test TestCase, act
 	}
 
 	if strings.EqualFold(decision, test.Expect) {
-		fmt.Printf("  ✓ PASS: %s (matched: %s)\n\n", decision, detail)
+		if cfg.ShowMatchedSuccess {
+			printTestSuccess(test, action, resources, decision, detail, result.MatchedStatements, cfg)
+		} else {
+			fmt.Printf("  ✓ PASS: %s (matched: %s)\n\n", decision, detail)
+		}
 		return true
 	}
 
-	printTestFailure(test, action, resources, decision, detail)
+	printTestFailure(test, action, resources, decision, detail, result.MatchedStatements, cfg)
 	return false
 }
 
-// printTestFailure prints a formatted failure message
-func printTestFailure(test TestCase, action string, resources []string, decision, detail string) {
-	if test.Name == "" {
-		resourceStr := "*"
-		if len(resources) > 0 {
-			resourceStr = resources[0]
-		}
-		fmt.Printf("  ✗ FAIL: %s on %s failed: expected %s, got %s\n\n", action, resourceStr, test.Expect, decision)
+// printTestSuccess prints a formatted success message with matched statement details
+func printTestSuccess(test TestCase, action string, resources []string, decision, detail string, matchedStatements []types.Statement, cfg SimulatorConfig) {
+	fmt.Printf("  ✓ PASS:\n")
+	printTestDetails(test, action, resources, decision, matchedStatements, cfg)
+}
+
+// printTestFailure prints a formatted failure message with matched statement details
+func printTestFailure(test TestCase, action string, resources []string, decision, detail string, matchedStatements []types.Statement, cfg SimulatorConfig) {
+	fmt.Printf("  ✗ FAIL:\n")
+	printTestDetails(test, action, resources, decision, matchedStatements, cfg)
+}
+
+// printTestDetails prints the common details for both success and failure cases
+func printTestDetails(test TestCase, action string, resources []string, decision string, matchedStatements []types.Statement, cfg SimulatorConfig) {
+	fmt.Printf("    Expected: %s\n", test.Expect)
+	fmt.Printf("    Action:   %s\n", action)
+
+	// Display resources
+	if len(resources) == 0 {
+		fmt.Printf("    Resource: *\n")
+	} else if len(resources) == 1 {
+		fmt.Printf("    Resource: %s\n", resources[0])
 	} else {
-		fmt.Printf("  ✗ FAIL: expected %s, got %s (matched: %s)\n\n", test.Expect, decision, detail)
+		fmt.Printf("    Resources:\n")
+		for _, res := range resources {
+			fmt.Printf("      - %s\n", res)
+		}
 	}
+
+	// Display context keys if present
+	if len(test.Context) > 0 {
+		fmt.Printf("    Context:\n")
+		for _, ctx := range test.Context {
+			if len(ctx.ContextKeyValues) == 1 {
+				fmt.Printf("      %s = %s\n", ctx.ContextKeyName, ctx.ContextKeyValues[0])
+			} else {
+				fmt.Printf("      %s = [%s]\n", ctx.ContextKeyName, strings.Join(ctx.ContextKeyValues, ", "))
+			}
+		}
+	}
+
+	fmt.Printf("    Got:      %s\n", decision)
+
+	// Display matched statements with source information
+	displayMatchedStatements(matchedStatements, cfg)
+	fmt.Println()
+}
+
+// displayMatchedStatements shows detailed information about matched policy statements
+func displayMatchedStatements(matchedStatements []types.Statement, cfg SimulatorConfig) {
+	if len(matchedStatements) == 0 || cfg.SourceMap == nil {
+		return
+	}
+
+	fmt.Println("  Matched statements:")
+	for _, stmt := range matchedStatements {
+		displaySingleStatement(stmt, cfg)
+	}
+}
+
+// displaySingleStatement displays a single matched statement with source information
+func displaySingleStatement(stmt types.Statement, cfg SimulatorConfig) {
+	if stmt.SourcePolicyId == nil {
+		return
+	}
+
+	sourcePolicyID := *stmt.SourcePolicyId
+	var source *PolicySource
+
+	// Determine which policy this statement came from
+	switch {
+	case strings.HasPrefix(sourcePolicyID, "PolicyInputList"):
+		// Look up specific identity policy statement by extracting Sid
+		policyJSON := cfg.SourceMap.IdentityPolicyRaw
+		if stmt.StartPosition != nil && stmt.EndPosition != nil && policyJSON != "" {
+			stmtJSON := extractStatementFromPolicy(policyJSON, stmt.StartPosition, stmt.EndPosition)
+			if trackingSid := extractSidFromJSON(stmtJSON); trackingSid != "" {
+				if src, ok := cfg.SourceMap.Identity[trackingSid]; ok {
+					source = src
+				}
+			}
+		}
+	case strings.HasPrefix(sourcePolicyID, "PermissionsBoundaryPolicyInputList"):
+		// Look up specific SCP statement by extracting Sid
+		policyJSON := cfg.SourceMap.PermissionsBoundaryRaw
+		if stmt.StartPosition != nil && stmt.EndPosition != nil && policyJSON != "" {
+			stmtJSON := extractStatementFromPolicy(policyJSON, stmt.StartPosition, stmt.EndPosition)
+			if trackingSid := extractSidFromJSON(stmtJSON); trackingSid != "" {
+				if src, ok := cfg.SourceMap.PermissionsBoundary[trackingSid]; ok {
+					source = src
+				}
+			}
+		}
+	case strings.HasPrefix(sourcePolicyID, "ResourcePolicy"):
+		source = cfg.SourceMap.ResourcePolicy
+	default:
+		// Unknown source
+		fmt.Printf("    • %s (unknown source)\n", sourcePolicyID)
+		return
+	}
+
+	// Display header with Sid if available
+	if source != nil && source.Sid != "" {
+		fmt.Printf("    • %s (Sid: %s)\n", sourcePolicyID, source.Sid)
+	} else {
+		fmt.Printf("    • %s\n", sourcePolicyID)
+	}
+
+	// Display source file path with line numbers
+	if source != nil && source.FilePath != "" {
+		if source.StartLine > 0 && source.EndLine > 0 {
+			fmt.Printf("      Source: %s:%d-%d\n", source.FilePath, source.StartLine, source.EndLine)
+		} else {
+			fmt.Printf("      Source: %s\n", source.FilePath)
+		}
+
+		// Display statement with context from source file
+		displayStatementWithContext(source)
+	}
+}
+
+// displayStatementWithContext reads the source file and displays the statement lines
+func displayStatementWithContext(source *PolicySource) {
+	if source.StartLine == 0 || source.EndLine == 0 {
+		return
+	}
+
+	// Read source file
+	content, err := os.ReadFile(source.FilePath)
+	if err != nil {
+		return
+	}
+
+	lines := strings.Split(string(content), "\n")
+	if len(lines) == 0 {
+		return
+	}
+
+	fmt.Println()
+	// Display only the statement lines (StartLine to EndLine)
+	for i := source.StartLine - 1; i < source.EndLine; i++ { // -1 for 0-based array indexing
+		if i >= 0 && i < len(lines) {
+			fmt.Printf("      %d: %s\n", i+1, lines[i])
+		}
+	}
+}
+
+// extractStatementFromPolicy extracts a statement JSON from policy using line/column positions
+func extractStatementFromPolicy(policyJSON string, start, end *types.Position) string {
+	if start == nil || end == nil {
+		return ""
+	}
+
+	lines := strings.Split(policyJSON, "\n")
+	if len(lines) == 0 {
+		return ""
+	}
+
+	startLine := int(start.Line) - 1 // AWS uses 1-based line numbers
+	endLine := int(end.Line) - 1
+	startCol := int(start.Column) - 1 // AWS uses 1-based column numbers
+	endCol := int(end.Column) - 1
+
+	if startLine < 0 || startLine >= len(lines) || endLine < 0 || endLine >= len(lines) {
+		return ""
+	}
+
+	var extracted string
+	if startLine == endLine {
+		// Single line
+		if startCol >= 0 && endCol <= len(lines[startLine]) {
+			extracted = lines[startLine][startCol:endCol]
+		}
+	} else {
+		// Multi-line
+		var builder strings.Builder
+		// First line (from startCol to end)
+		if startCol >= 0 && startCol < len(lines[startLine]) {
+			builder.WriteString(lines[startLine][startCol:])
+			builder.WriteString("\n")
+		}
+		// Middle lines (complete lines)
+		for i := startLine + 1; i < endLine; i++ {
+			if i < len(lines) {
+				builder.WriteString(lines[i])
+				builder.WriteString("\n")
+			}
+		}
+		// Last line (from start to endCol)
+		if endLine < len(lines) && endCol >= 0 && endCol <= len(lines[endLine]) {
+			builder.WriteString(lines[endLine][:endCol])
+		}
+		extracted = builder.String()
+	}
+
+	// Clean up: trim whitespace and leading commas that AWS includes
+	extracted = strings.TrimSpace(extracted)
+	extracted = strings.TrimPrefix(extracted, ",")
+	extracted = strings.TrimSpace(extracted)
+
+	return extracted
+}
+
+// extractSidFromJSON extracts the Sid field from a statement JSON string
+func extractSidFromJSON(stmtJSON string) string {
+	var stmt map[string]any
+	if err := json.Unmarshal([]byte(stmtJSON), &stmt); err != nil {
+		return ""
+	}
+	if sid, ok := stmt["Sid"]; ok {
+		if sidStr, ok := sid.(string); ok {
+			return sidStr
+		}
+	}
+	return ""
 }
 
 // printTestSummary prints the final test summary
