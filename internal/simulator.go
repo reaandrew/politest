@@ -147,19 +147,48 @@ func getTestName(test TestCase, action string, resources []string) string {
 }
 
 // mergeContextEntries merges scenario-level and test-level context
+// Test-level context entries override scenario-level entries with the same ContextKeyName
 func mergeContextEntries(scenCtx, testCtx []ContextEntryYml, vars map[string]any) ([]types.ContextEntry, error) {
-	ctxEntries, err := RenderContext(scenCtx, vars)
+	// Render scenario context
+	scenCtxRendered, err := RenderContext(scenCtx, vars)
 	if err != nil {
 		return nil, err
 	}
-	if len(testCtx) > 0 {
-		testCtxRendered, err := RenderContext(testCtx, vars)
-		if err != nil {
-			return nil, err
-		}
-		ctxEntries = append(ctxEntries, testCtxRendered...)
+
+	if len(testCtx) == 0 {
+		return scenCtxRendered, nil
 	}
-	return ctxEntries, nil
+
+	// Render test context
+	testCtxRendered, err := RenderContext(testCtx, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build map of test context keys for override lookup
+	testCtxMap := make(map[string]types.ContextEntry)
+	for _, entry := range testCtxRendered {
+		if entry.ContextKeyName != nil {
+			testCtxMap[*entry.ContextKeyName] = entry
+		}
+	}
+
+	// Merge: test context overrides scenario context by key name
+	result := make([]types.ContextEntry, 0)
+	for _, entry := range scenCtxRendered {
+		if entry.ContextKeyName != nil {
+			if _, overridden := testCtxMap[*entry.ContextKeyName]; !overridden {
+				result = append(result, entry) // Keep scenario entry if not overridden
+			}
+		} else {
+			result = append(result, entry) // Keep entries without key names
+		}
+	}
+
+	// Add all test context entries (overrides + new keys)
+	result = append(result, testCtxRendered...)
+
+	return result, nil
 }
 
 // resolveResourcePolicy determines the resource policy for a test
