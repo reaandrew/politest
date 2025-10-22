@@ -151,7 +151,6 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		}
 		merged, sourceMap := internal.MergeSCPFilesWithSourceMap(files)
 		scpSourceMap = sourceMap
-		pbJSON = internal.ToJSONMin(merged)
 		pbJSON = internal.ToJSONPretty(merged)
 
 		// Warn that SCP simulation is an approximation (unless suppressed)
