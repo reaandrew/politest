@@ -784,7 +784,7 @@ tests:
 	}
 
 	// Attempt to prepare simulation - should fail with JSON error
-	_, err := prepareSimulation(scenarioPath, false, false, os.Stdout)
+	_, err := prepareSimulation(scenarioPath, false, false, false, os.Stdout)
 	if err == nil {
 		t.Fatal("Expected error for invalid JSON, got nil")
 	}
@@ -827,7 +827,7 @@ tests:
 	}
 
 	// Attempt to prepare simulation - should fail with JSON error
-	_, err := prepareSimulation(scenarioPath, false, false, os.Stdout)
+	_, err := prepareSimulation(scenarioPath, false, false, false, os.Stdout)
 	if err == nil {
 		t.Fatal("Expected error for invalid JSON, got nil")
 	}
