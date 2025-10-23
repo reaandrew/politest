@@ -56,27 +56,56 @@ run_failure_test() {
 
   echo -e "${YELLOW}Testing: $test_name${NC}"
 
+  # Determine which flags to use based on scenario name
+  local flags=("--scenario" "scenarios/$scenario_file")
+  if [[ "$test_name" == fail-strict-policy-* ]]; then
+    flags+=("--strict-policy")
+  fi
+
   # Run politest and capture output + exit code (never abort)
   local output exit_code
-  output=$("$POLITEST" --scenario "scenarios/$scenario_file" 2>&1)
+  output=$("$POLITEST" "${flags[@]}" 2>&1)
   exit_code=$?
 
   local test_passed=true
 
-  # Expect exit code 2 (assertion failure inside politest)
-  if [ "$exit_code" -eq 2 ]; then
-    echo -e "  ${GREEN}✓${NC} Exit code 2 (test failed as expected)"
-  else
-    echo -e "  ${RED}✗${NC} Exit code: expected 2, got $exit_code"
-    test_passed=false
-  fi
-
-  # Common assertions (all scenarios)
-  assert_contains_lit "$output" "Expected: allowed" "Shows 'Expected: allowed'" || test_passed=false
-  assert_contains_lit "$output" "Got:      explicitDeny" "Shows 'Got: explicitDeny'" || test_passed=false
-  assert_contains_lit "$output" "Matched statements:" "Shows 'Matched statements:' section" || test_passed=false
-
   # Scenario-specific assertions
+  case "$test_name" in
+    fail-strict-policy-*)
+      # For --strict-policy failures, expect exit code 1 (validation error)
+      if [ "$exit_code" -eq 1 ]; then
+        echo -e "  ${GREEN}✓${NC} Exit code 1 (validation failed as expected)"
+      else
+        echo -e "  ${RED}✗${NC} Exit code: expected 1, got $exit_code"
+        test_passed=false
+      fi
+
+      # Check that error message mentions non-IAM fields
+      if echo "$output" | grep -q "non-IAM"; then
+        echo -e "  ${GREEN}✓${NC} Error message mentions 'non-IAM'"
+      else
+        echo -e "  ${RED}✗${NC} Error message should mention 'non-IAM'"
+        test_passed=false
+      fi
+      ;;
+
+    fail-01-scp-deny | fail-02-identity-deny-ip | fail-03-identity-deny-mfa)
+      # For matched statement failures, expect exit code 2 (assertion failure)
+      if [ "$exit_code" -eq 2 ]; then
+        echo -e "  ${GREEN}✓${NC} Exit code 2 (test failed as expected)"
+      else
+        echo -e "  ${RED}✗${NC} Exit code: expected 2, got $exit_code"
+        test_passed=false
+      fi
+
+      # Common assertions (all matched statement scenarios)
+      assert_contains_lit "$output" "Expected: allowed" "Shows 'Expected: allowed'" || test_passed=false
+      assert_contains_lit "$output" "Got:      explicitDeny" "Shows 'Got: explicitDeny'" || test_passed=false
+      assert_contains_lit "$output" "Matched statements:" "Shows 'Matched statements:' section" || test_passed=false
+      ;;
+  esac
+
+  # Scenario-specific detailed assertions
   case "$test_name" in
     fail-01-scp-deny)
       # Test 1: s3:GetObject on test-bucket/data.txt
@@ -196,4 +225,3 @@ echo "========================================"
 echo -e "Test Results: ${GREEN}$PASS_COUNT passed${NC}, ${RED}$FAIL_COUNT failed${NC}"
 echo "========================================"
 exit $(( FAIL_COUNT > 0 ))
-

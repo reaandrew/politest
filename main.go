@@ -46,7 +46,7 @@ type simulationPrep struct {
 
 // prepareSimulation loads and prepares all data for simulation WITHOUT contacting AWS
 // This function is AWS-free and safe for unit testing
-func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.Writer) (*simulationPrep, error) {
+func prepareSimulation(scenarioPath string, noWarn, debug, strictPolicy bool, debugWriter io.Writer) (*simulationPrep, error) {
 	if scenarioPath == "" {
 		return nil, fmt.Errorf("missing --scenario\nUsage: politest --scenario <path> [--save <path>] [--no-assert] [--no-warn] [--debug]")
 	}
@@ -130,6 +130,16 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		return nil, fmt.Errorf("scenario must include 'policy_json' or 'policy_template'")
 	}
 
+	// Validate IAM fields if --strict-policy flag is set
+	if strictPolicy {
+		if err := internal.ValidateIAMFields(policyJSON); err != nil {
+			return nil, fmt.Errorf("identity policy validation failed:\n%v", err)
+		}
+	}
+
+	// Always strip non-IAM fields before sending to AWS
+	policyJSON = internal.StripNonIAMFields(policyJSON)
+
 	if debug {
 		fmt.Fprintf(debugWriter, "🔍 DEBUG: Rendered policy (pretty-printed):\n%s\n", policyJSON)
 	}
@@ -152,6 +162,16 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 		merged, sourceMap := internal.MergeSCPFilesWithSourceMap(files)
 		scpSourceMap = sourceMap
 		pbJSON = internal.ToJSONPretty(merged)
+
+		// Validate IAM fields if --strict-policy flag is set
+		if strictPolicy {
+			if err := internal.ValidateIAMFields(pbJSON); err != nil {
+				return nil, fmt.Errorf("SCP/RCP validation failed:\n%v", err)
+			}
+		}
+
+		// Always strip non-IAM fields before sending to AWS
+		pbJSON = internal.StripNonIAMFields(pbJSON)
 
 		// Warn that SCP simulation is an approximation (unless suppressed)
 		if !noWarn {
@@ -186,6 +206,19 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 			fmt.Fprintf(debugWriter, "🔍 DEBUG: Loading resource policy template from: %s\n", tplPath)
 		}
 		resourcePolicyJSON = internal.RenderTemplateFileJSON(tplPath, allVars)
+	}
+
+	// Validate and strip resource policy if present
+	if resourcePolicyJSON != "" {
+		// Validate IAM fields if --strict-policy flag is set
+		if strictPolicy {
+			if err := internal.ValidateIAMFields(resourcePolicyJSON); err != nil {
+				return nil, fmt.Errorf("resource policy validation failed:\n%v", err)
+			}
+		}
+
+		// Always strip non-IAM fields before sending to AWS
+		resourcePolicyJSON = internal.StripNonIAMFields(resourcePolicyJSON)
 	}
 
 	if debug && resourcePolicyJSON != "" {
@@ -239,9 +272,9 @@ func prepareSimulation(scenarioPath string, noWarn, debug bool, debugWriter io.W
 }
 
 // run contains the main application logic and returns an error instead of calling Die()
-func run(scenarioPath, savePath string, noAssert, noWarn, debug, showMatchedSuccess bool, testFilter string, debugWriter io.Writer) error {
+func run(scenarioPath, savePath string, noAssert, noWarn, debug, strictPolicy, showMatchedSuccess bool, testFilter string, debugWriter io.Writer) error {
 	// Prepare simulation data (AWS-free)
-	prep, err := prepareSimulation(scenarioPath, noWarn, debug, debugWriter)
+	prep, err := prepareSimulation(scenarioPath, noWarn, debug, strictPolicy, debugWriter)
 	if err != nil {
 		return err
 	}
@@ -280,6 +313,7 @@ type cliFlags struct {
 	noWarn             bool
 	showVersion        bool
 	debug              bool
+	strictPolicy       bool
 	showMatchedSuccess bool
 	tests              string // comma-separated list of test names to run
 }
@@ -298,6 +332,7 @@ func parseFlags(args []string) (*cliFlags, []string, error) {
 	fs.BoolVar(&flags.showMatchedSuccess, "show-matched-success", false, "Show matched statements for passing tests")
 	fs.BoolVar(&flags.showVersion, "version", false, "Show version information and exit")
 	fs.StringVar(&flags.tests, "test", "", "Comma-separated list of test names to run (runs all if empty)")
+	fs.BoolVar(&flags.strictPolicy, "strict-policy", false, "Fail if policies contain non-IAM fields")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, nil, err
@@ -339,7 +374,7 @@ func realMain(args []string) int {
 	}
 
 	// Run main logic
-	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn, flags.debug, flags.showMatchedSuccess, flags.tests, os.Stdout); err != nil {
+	if err := run(flags.scenarioPath, flags.savePath, flags.noAssert, flags.noWarn, flags.debug, flags.strictPolicy, flags.showMatchedSuccess, flags.tests, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}

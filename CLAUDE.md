@@ -228,6 +228,30 @@ Failure output format:
 - Named tests: `✗ FAIL: expected allowed, got implicitDeny (matched: ...)`
 - Unnamed tests: `✗ FAIL: s3:GetObject on arn:aws:s3:::bucket/* failed: expected allowed, got implicitDeny`
 
+**Important SCP Testing Pattern:**
+
+When testing with SCPs, **always include `permissive.json` alongside any restrictive SCPs**. This pattern reflects real-world AWS Organizations behavior where SCPs function as permissions boundaries:
+
+```yaml
+# CORRECT: Include permissive.json with restrictive SCP
+scp_paths:
+  - "../scp/permissive.json"
+  - "../scp/deny-s3-write.json"
+
+# INCORRECT: Only restrictive SCP (missing permissive baseline)
+scp_paths:
+  - "../scp/deny-s3-write.json"
+```
+
+**Why this pattern?**
+- SCPs work as intersections - all must allow for an action to succeed
+- The permissive SCP provides the baseline "allow all" boundary
+- Restrictive SCPs then carve out specific denies
+- This matches AWS Organizations' actual SCP evaluation logic
+- Tests validate that the restrictive SCP correctly blocks the intended actions
+
+**Exception**: Tests that only use `permissive.json` alone (without restrictive SCPs) are valid when testing that identity policies work without organizational restrictions.
+
 Run tests: `cd test && bash run-tests.sh`
 
 ### Using Context Conditions

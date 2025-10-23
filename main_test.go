@@ -179,7 +179,7 @@ func TestUnknownArguments(t *testing.T) {
 func TestRunMissingScenario(t *testing.T) {
 	// Test prepareSimulation() with empty scenario path
 	var buf bytes.Buffer
-	_, err := prepareSimulation("", false, false, &buf)
+	_, err := prepareSimulation("", false, false, false, &buf)
 	if err == nil {
 		t.Error("Expected error when scenario path is empty")
 	}
@@ -192,7 +192,7 @@ func TestRunMissingScenario(t *testing.T) {
 func TestRunInvalidScenarioFile(t *testing.T) {
 	// Test prepareSimulation() with non-existent scenario file
 	var buf bytes.Buffer
-	_, err := prepareSimulation("/nonexistent/scenario.yml", false, false, &buf)
+	_, err := prepareSimulation("/nonexistent/scenario.yml", false, false, false, &buf)
 	if err == nil {
 		t.Error("Expected error when scenario file does not exist")
 	}
@@ -216,7 +216,7 @@ tests:
 	}
 
 	var buf bytes.Buffer
-	_, err := prepareSimulation(scenarioPath, false, false, &buf)
+	_, err := prepareSimulation(scenarioPath, false, false, false, &buf)
 	if err == nil {
 		t.Error("Expected error when both policy_json and policy_template are specified")
 	}
@@ -242,7 +242,7 @@ func TestRunMissingPolicyFields(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	_, err := prepareSimulation(scenarioPath, false, false, &buf)
+	_, err := prepareSimulation(scenarioPath, false, false, false, &buf)
 	if err == nil {
 		t.Error("Expected error when neither policy_json nor policy_template is specified")
 	}
@@ -272,7 +272,7 @@ tests: []
 	}
 
 	var buf bytes.Buffer
-	_, err := prepareSimulation(scenarioPath, false, false, &buf)
+	_, err := prepareSimulation(scenarioPath, false, false, false, &buf)
 	if err == nil {
 		t.Error("Expected error when tests array is empty")
 	}
@@ -562,7 +562,7 @@ tests:
 	var debugBuf bytes.Buffer
 
 	// Prepare simulation with debug=true (AWS-free)
-	_, err := prepareSimulation(scenarioPath, false, true, &debugBuf)
+	_, err := prepareSimulation(scenarioPath, false, true, false, &debugBuf)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -617,7 +617,7 @@ tests:
 	var debugBuf bytes.Buffer
 
 	// Prepare simulation with debug=false (AWS-free)
-	_, err := prepareSimulation(scenarioPath, false, false, &debugBuf)
+	_, err := prepareSimulation(scenarioPath, false, false, false, &debugBuf)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -674,7 +674,7 @@ tests:
 	var debugBuf bytes.Buffer
 
 	// Prepare simulation with debug=true (AWS-free)
-	_, err := prepareSimulation(scenarioPath, false, true, &debugBuf)
+	_, err := prepareSimulation(scenarioPath, false, true, false, &debugBuf)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -746,7 +746,7 @@ tests:
 	var debugBuf bytes.Buffer
 
 	// Prepare simulation with debug=true (AWS-free)
-	_, err := prepareSimulation(scenarioPath, false, true, &debugBuf)
+	_, err := prepareSimulation(scenarioPath, false, true, false, &debugBuf)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -784,7 +784,7 @@ tests:
 	}
 
 	// Attempt to prepare simulation - should fail with JSON error
-	_, err := prepareSimulation(scenarioPath, false, false, os.Stdout)
+	_, err := prepareSimulation(scenarioPath, false, false, false, os.Stdout)
 	if err == nil {
 		t.Fatal("Expected error for invalid JSON, got nil")
 	}
@@ -827,7 +827,7 @@ tests:
 	}
 
 	// Attempt to prepare simulation - should fail with JSON error
-	_, err := prepareSimulation(scenarioPath, false, false, os.Stdout)
+	_, err := prepareSimulation(scenarioPath, false, false, false, os.Stdout)
 	if err == nil {
 		t.Fatal("Expected error for invalid JSON, got nil")
 	}
