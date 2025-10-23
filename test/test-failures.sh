@@ -57,14 +57,14 @@ run_failure_test() {
   echo -e "${YELLOW}Testing: $test_name${NC}"
 
   # Determine which flags to use based on scenario name
-  local flags="--scenario scenarios/$scenario_file"
+  local flags=("--scenario" "scenarios/$scenario_file")
   if [[ "$test_name" == fail-strict-policy-* ]]; then
-    flags="$flags --strict-policy"
+    flags+=("--strict-policy")
   fi
 
   # Run politest and capture output + exit code (never abort)
   local output exit_code
-  output=$("$POLITEST" $flags 2>&1)
+  output=$("$POLITEST" "${flags[@]}" 2>&1)
   exit_code=$?
 
   local test_passed=true
