@@ -1,3 +1,15 @@
+## [3.4.0](https://github.com/reaandrew/politest/compare/v3.3.0...v3.4.0) (2025-10-23)
+
+### Features
+
+* add --test flag to run specific named tests ([#16](https://github.com/reaandrew/politest/issues/16)) ([33d50ff](https://github.com/reaandrew/politest/commit/33d50ff288a47680abe6044cfcb170bc96fb8ca3)), closes [#15](https://github.com/reaandrew/politest/issues/15)
+* send pretty-printed JSON to AWS API for better error messages ([#17](https://github.com/reaandrew/politest/issues/17)) ([e3f4c70](https://github.com/reaandrew/politest/commit/e3f4c706faac0f73e0aa8ece4df71ffeeb00cc8a)), closes [#14](https://github.com/reaandrew/politest/issues/14)
+* strip non-IAM fields from policies and add --strict-policy flag ([#18](https://github.com/reaandrew/politest/issues/18)) ([77adc6f](https://github.com/reaandrew/politest/commit/77adc6fff4e0803811a1419730ee309be1ed3492)), closes [#13](https://github.com/reaandrew/politest/issues/13)
+
+### Bug Fixes
+
+* **security:** pin GitHub Actions to commit SHAs in claude workflow ([#28](https://github.com/reaandrew/politest/issues/28)) ([080028e](https://github.com/reaandrew/politest/commit/080028e53bb9255697985eaf3986c107497d4920))
+
 ## [3.3.0](https://github.com/reaandrew/politest/compare/v3.2.0...v3.3.0) (2025-10-22)
 
 ### Features
