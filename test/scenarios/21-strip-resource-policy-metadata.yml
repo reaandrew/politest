@@ -1,0 +1,23 @@
+# Test: Resource policy with non-IAM fields
+# Expected: Non-IAM fields stripped from resource policy, cross-account access works
+
+policy_json: "../policies/user-alice-identity.json"
+resource_policy_json: "../policies/s3-resource-policy-with-metadata.json"
+caller_arn: "arn:aws:iam::111111111111:user/alice"
+resource_owner: "arn:aws:iam::222222222222:root"
+
+tests:
+  - name: "Cross-account GetObject allowed by resource policy (metadata stripped)"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    expect: "allowed"
+
+  - name: "Cross-account ListBucket allowed by resource policy (metadata stripped)"
+    action: "s3:ListBucket"
+    resource: "arn:aws:s3:::shared-bucket"
+    expect: "allowed"
+
+  - name: "PutObject denied (not in resource policy)"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::shared-bucket/data.txt"
+    expect: "implicitDeny"

@@ -253,6 +253,12 @@ func resolveResourcePolicy(test TestCase, cfg SimulatorConfig, testIndex int) st
 		tplPath := MustAbsJoin(base, test.ResourcePolicyTemplate)
 		testResourcePolicy = RenderTemplateFileJSON(tplPath, cfg.Variables)
 	}
+
+	// Always strip non-IAM fields from test-level resource policies
+	if testResourcePolicy != "" {
+		testResourcePolicy = StripNonIAMFields(testResourcePolicy)
+	}
+
 	return testResourcePolicy
 }
 

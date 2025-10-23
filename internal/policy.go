@@ -3,6 +3,7 @@ package internal
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -285,4 +286,152 @@ func ToJSONPretty(v any) string {
 	b, err := json.MarshalIndent(v, "", "  ")
 	Check(err)
 	return string(b)
+}
+
+// StripNonIAMFields removes all fields that are not part of the official IAM policy schema
+// This allows policies with metadata/comments to work with AWS API
+func StripNonIAMFields(policyJSON string) string {
+	var policy map[string]any
+	if err := json.Unmarshal([]byte(policyJSON), &policy); err != nil {
+		Die("invalid JSON in policy: %v", err)
+	}
+
+	cleaned := stripPolicyDocument(policy)
+	b, err := json.MarshalIndent(cleaned, "", "  ")
+	Check(err)
+	return string(b)
+}
+
+// ValidateIAMFields checks if policy contains non-IAM fields and returns error with details
+// Used with --strict-policy flag to enforce schema compliance
+func ValidateIAMFields(policyJSON string) error {
+	var policy map[string]any
+	if err := json.Unmarshal([]byte(policyJSON), &policy); err != nil {
+		return fmt.Errorf("invalid JSON in policy: %v", err)
+	}
+
+	var violations []string
+
+	// Check top-level fields
+	validTopLevel := map[string]bool{
+		"Version":   true,
+		"Id":        true,
+		"Statement": true,
+	}
+
+	for field := range policy {
+		if !validTopLevel[field] {
+			violations = append(violations, fmt.Sprintf("  Top-level: %s", field))
+		}
+	}
+
+	// Check statement fields
+	if statements, ok := policy["Statement"].([]any); ok {
+		for i, stmt := range statements {
+			if stmtMap, ok := stmt.(map[string]any); ok {
+				invalidFields := findInvalidStatementFields(stmtMap)
+				for _, field := range invalidFields {
+					violations = append(violations, fmt.Sprintf("  Statement[%d]: %s", i, field))
+				}
+			}
+		}
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("policy contains non-IAM fields:\n%s\n\nUse standard IAM schema fields only, or remove --strict-policy flag", strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func stripPolicyDocument(policy map[string]any) map[string]any {
+	result := make(map[string]any)
+
+	// Valid IAM policy top-level fields
+	validTopLevel := map[string]bool{
+		"Version":   true, // Required
+		"Id":        true, // Optional
+		"Statement": true, // Required
+	}
+
+	for field, value := range policy {
+		if !validTopLevel[field] {
+			continue // Skip non-IAM fields
+		}
+
+		if field == "Statement" {
+			result[field] = stripStatements(value)
+		} else {
+			result[field] = value
+		}
+	}
+
+	return result
+}
+
+func stripStatements(statementsRaw any) any {
+	statements, ok := statementsRaw.([]any)
+	if !ok {
+		return statementsRaw
+	}
+
+	cleaned := make([]any, 0, len(statements))
+	for _, stmt := range statements {
+		stmtMap, ok := stmt.(map[string]any)
+		if !ok {
+			cleaned = append(cleaned, stmt)
+			continue
+		}
+
+		cleaned = append(cleaned, stripStatementFields(stmtMap))
+	}
+
+	return cleaned
+}
+
+func stripStatementFields(stmt map[string]any) map[string]any {
+	// Valid IAM statement fields per AWS documentation
+	validFields := map[string]bool{
+		"Sid":          true, // Optional statement ID
+		"Effect":       true, // Required: Allow or Deny
+		"Principal":    true, // For resource-based policies
+		"NotPrincipal": true,
+		"Action":       true,
+		"NotAction":    true,
+		"Resource":     true,
+		"NotResource":  true,
+		"Condition":    true, // Optional conditions
+	}
+
+	result := make(map[string]any)
+	for field, value := range stmt {
+		if validFields[field] {
+			result[field] = value
+		}
+	}
+
+	return result
+}
+
+func findInvalidStatementFields(stmt map[string]any) []string {
+	validFields := map[string]bool{
+		"Sid":          true,
+		"Effect":       true,
+		"Principal":    true,
+		"NotPrincipal": true,
+		"Action":       true,
+		"NotAction":    true,
+		"Resource":     true,
+		"NotResource":  true,
+		"Condition":    true,
+	}
+
+	var invalid []string
+	for field := range stmt {
+		if !validFields[field] {
+			invalid = append(invalid, field)
+		}
+	}
+
+	return invalid
 }

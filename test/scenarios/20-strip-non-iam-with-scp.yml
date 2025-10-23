@@ -1,0 +1,28 @@
+# Test: Multiple policies with non-IAM fields (identity policy + SCP)
+# Expected: Non-IAM fields stripped from both identity and SCP policies
+
+policy_json: "../policies/allow-s3-with-metadata.json"
+scp_paths:
+  - "../scp/permissive.json"
+  - "../scp/deny-s3-delete-with-metadata.json"
+
+tests:
+  - name: "GetObject allowed by identity policy and SCP"
+    action: "s3:GetObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"
+
+  - name: "PutObject allowed by identity policy and SCP"
+    action: "s3:PutObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "allowed"
+
+  - name: "DeleteObject denied by SCP (with metadata stripped)"
+    action: "s3:DeleteObject"
+    resource: "arn:aws:s3:::test-bucket/*"
+    expect: "explicitDeny"
+
+  - name: "DeleteBucket denied by SCP (with metadata stripped)"
+    action: "s3:DeleteBucket"
+    resource: "arn:aws:s3:::test-bucket"
+    expect: "explicitDeny"

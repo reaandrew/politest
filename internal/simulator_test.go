@@ -1059,8 +1059,20 @@ func TestResolveResourcePolicyWithScenarioDefault(t *testing.T) {
 
 	result := resolveResourcePolicy(test, cfg, 0)
 
-	if result != scenarioResourcePolicy {
-		t.Errorf("resolveResourcePolicy() = %v, want scenario default %v", result, scenarioResourcePolicy)
+	// Verify result is valid JSON (pretty-printed now)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Errorf("resolveResourcePolicy() produced invalid JSON: %v", err)
+	}
+
+	// Verify it's pretty-printed
+	if !strings.Contains(result, "\n") {
+		t.Error("resolveResourcePolicy() should return pretty-printed JSON")
+	}
+
+	// Verify the parsed content matches the expected structure
+	if parsed["Version"] != "2012-10-17" {
+		t.Error("resolveResourcePolicy() should preserve Version field")
 	}
 }
 
