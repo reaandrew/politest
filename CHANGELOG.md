@@ -1,3 +1,5 @@
+## [3.4.6](https://github.com/reaandrew/politest/compare/v3.4.5...v3.4.6) (2025-11-05)
+
 ## [3.4.5](https://github.com/reaandrew/politest/compare/v3.4.4...v3.4.5) (2025-11-05)
 
 ## [3.4.4](https://github.com/reaandrew/politest/compare/v3.4.3...v3.4.4) (2025-10-23)
