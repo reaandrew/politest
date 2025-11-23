@@ -98,6 +98,98 @@ A single-binary Go tool for testing AWS IAM policies using scenario-based YAML c
   - Displays full statement JSON from source for failed tests
   - Optional --show-matched-success flag for passing tests
 
+- **AI-powered policy generation** (NEW)
+  - Generate security-focused IAM policies from AWS documentation
+  - Scrapes actions, conditions, and resource types automatically
+  - Uses OpenAI-compatible LLM APIs to create compliant policies
+  - Produces documentation explaining each policy statement
+  - 24-hour caching of AWS documentation pages
+
+## Generate Command
+
+The `generate` command creates security-focused IAM policies by scraping AWS service authorization documentation and using an LLM to generate appropriate policy statements.
+
+### Features
+
+- **Automatic scraping** of IAM actions, condition keys, and resource types from AWS docs
+- **Parallel batch processing** for faster policy generation
+- **Customizable prompts** to specify your security requirements
+- **24-hour caching** of documentation pages to reduce API calls
+- **Three output files**:
+  - `{service}-iam-reference.json` - Scraped IAM data
+  - `{service}-full-access-policy.json` - Generated policy
+  - `{service}-policy-documentation.md` - Human-readable documentation
+
+### Usage
+
+```bash
+politest generate [flags]
+
+Flags:
+  --url string          AWS IAM documentation URL (required)
+  --base-url string     OpenAI-compatible API base URL (required)
+  --model string        LLM model name (required)
+  --api-key string      API key for LLM service
+  --output string       Output directory (default ".")
+  --prompt string       Custom requirements/constraints for policy generation
+  --concurrency int     Number of parallel batch requests (default 3)
+  --no-enrich           Skip action description enrichment
+  --quiet               Suppress progress output
+```
+
+### Example
+
+```bash
+./politest generate \
+  --url "https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonbedrock.html" \
+  --base-url "https://your-llm-api.example.com/api" \
+  --model "claude-3-sonnet" \
+  --api-key "$LLM_API_KEY" \
+  --output "./output" \
+  --concurrency 4 \
+  --prompt "Require VPC endpoint conditions where supported. Deny access to \
+foundation models which require cross region inference. Include resource-level \
+permissions for all model invocation actions."
+```
+
+### Output
+
+The command generates three files:
+
+1. **IAM Reference** (`bedrock-iam-reference.json`)
+   - All scraped actions with descriptions and access levels
+   - Available condition keys and their types
+   - Resource types and ARN patterns
+
+2. **Generated Policy** (`bedrock-full-access-policy.json`)
+   - Security-focused IAM policy with grouped statements
+   - Includes conditions like `aws:SecureTransport` and MFA requirements
+   - Uses placeholder variables (e.g., `${AWS::AccountId}`, `${VpcEndpointId}`)
+
+3. **Documentation** (`bedrock-policy-documentation.md`)
+   - Explanation of each policy statement
+   - Variables that need to be configured
+   - Security summary and compliance considerations
+   - Usage recommendations
+
+### Placeholder Variables
+
+The generated policy uses consistent placeholder variables that you must replace:
+
+| Variable | Description |
+|----------|-------------|
+| `${AWS::AccountId}` | Your AWS account ID |
+| `${AWS::Region}` | Target AWS region |
+| `${VpcEndpointId}` | VPC endpoint ID for endpoint conditions |
+| `${VpcId}` | VPC ID |
+| `${OrgId}` | AWS Organization ID |
+| `${PrincipalTag/Department}` | Principal tag values |
+| `${ResourceTag/Environment}` | Resource tag values |
+
+### Caching
+
+AWS documentation pages are cached locally in `~/.cache/politest/` for 24 hours to reduce network requests during iterative policy development.
+
 ## ⚠️ Understanding What politest Tests
 
 **politest is a pre-deployment validation tool that helps you catch IAM policy issues early, but it is NOT a replacement for integration testing in real AWS environments.**

@@ -1,4 +1,5 @@
 // cmd: go run . --scenario scenarios/athena_primary.yml --save /tmp/resp.json
+// cmd: go run . generate --url https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonbedrock.html --base-url http://localhost:3000 --model gpt-4 --api-key xxx
 package main
 
 import (
@@ -349,9 +350,124 @@ func validateArgs(args []string) error {
 	return nil
 }
 
+// generateFlags holds the parsed flags for the generate command
+type generateFlags struct {
+	url         string
+	baseURL     string
+	apiKey      string
+	model       string
+	outputDir   string
+	noEnrich    bool
+	quiet       bool
+	prompt      string
+	concurrency int
+}
+
+// parseGenerateFlags parses command-line arguments for the generate command
+func parseGenerateFlags(args []string) (*generateFlags, error) {
+	fs := flag.NewFlagSet("generate", flag.ContinueOnError)
+
+	flags := &generateFlags{}
+
+	fs.StringVar(&flags.url, "url", "", "AWS IAM documentation URL (required)")
+	fs.StringVar(&flags.baseURL, "base-url", "", "OpenAI-compatible API base URL (required)")
+	fs.StringVar(&flags.apiKey, "api-key", "", "API key for LLM service")
+	fs.StringVar(&flags.model, "model", "", "LLM model name (required)")
+	fs.StringVar(&flags.outputDir, "output", ".", "Output directory for generated files")
+	fs.BoolVar(&flags.noEnrich, "no-enrich", false, "Skip action description enrichment")
+	fs.BoolVar(&flags.quiet, "quiet", false, "Suppress progress output")
+	fs.StringVar(&flags.prompt, "prompt", "", "Custom requirements/constraints to include in LLM prompt")
+	fs.IntVar(&flags.concurrency, "concurrency", 3, "Number of parallel batch requests")
+
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: politest generate [options]\n\n")
+		fmt.Fprintf(os.Stderr, "Generate security-focused IAM policies from AWS documentation.\n\n")
+		fmt.Fprintf(os.Stderr, "This command scrapes AWS IAM documentation pages to extract action definitions,\n")
+		fmt.Fprintf(os.Stderr, "condition keys, and resource types, then uses an LLM to generate a comprehensive\n")
+		fmt.Fprintf(os.Stderr, "security-focused policy suitable for regulated environments.\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		fs.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nExample:\n")
+		fmt.Fprintf(os.Stderr, "  politest generate \\\n")
+		fmt.Fprintf(os.Stderr, "    --url https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonbedrock.html \\\n")
+		fmt.Fprintf(os.Stderr, "    --base-url http://localhost:3000 \\\n")
+		fmt.Fprintf(os.Stderr, "    --model gpt-4 \\\n")
+		fmt.Fprintf(os.Stderr, "    --api-key $OPENAI_API_KEY\n")
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+
+	return flags, nil
+}
+
+// runGenerate runs the generate command
+func runGenerate(flags *generateFlags) error {
+	cfg := internal.GenerateConfig{
+		URL:         flags.url,
+		BaseURL:     flags.baseURL,
+		APIKey:      flags.apiKey,
+		Model:       flags.model,
+		OutputDir:   flags.outputDir,
+		NoEnrich:    flags.noEnrich,
+		Quiet:       flags.quiet,
+		UserPrompt:  flags.prompt,
+		Concurrency: flags.concurrency,
+	}
+
+	if err := internal.ValidateGenerateConfig(cfg); err != nil {
+		return err
+	}
+
+	_, err := internal.RunGenerate(cfg, os.Stdout)
+	return err
+}
+
+// printUsage prints the main usage information
+func printUsage() {
+	fmt.Fprintf(os.Stderr, "Usage: politest <command> [options]\n\n")
+	fmt.Fprintf(os.Stderr, "Commands:\n")
+	fmt.Fprintf(os.Stderr, "  (default)    Run IAM policy simulations from scenario files\n")
+	fmt.Fprintf(os.Stderr, "  generate     Generate security-focused IAM policies from AWS documentation\n")
+	fmt.Fprintf(os.Stderr, "\n")
+	fmt.Fprintf(os.Stderr, "Run 'politest <command> -h' for more information on a command.\n\n")
+	fmt.Fprintf(os.Stderr, "Simulation Options (default command):\n")
+	fmt.Fprintf(os.Stderr, "  -scenario string    Path to scenario YAML\n")
+	fmt.Fprintf(os.Stderr, "  -save string        Path to save raw JSON response\n")
+	fmt.Fprintf(os.Stderr, "  -no-assert          Do not fail on expectation mismatches\n")
+	fmt.Fprintf(os.Stderr, "  -no-warn            Suppress SCP/RCP simulation approximation warning\n")
+	fmt.Fprintf(os.Stderr, "  -debug              Show debug output\n")
+	fmt.Fprintf(os.Stderr, "  -version            Show version information\n")
+}
+
 // realMain contains the full main logic and returns an exit code
 // This allows testing without calling os.Exit
 func realMain(args []string) int {
+	// Check for subcommands
+	if len(args) > 0 {
+		switch args[0] {
+		case "generate":
+			genFlags, err := parseGenerateFlags(args[1:])
+			if err != nil {
+				if err == flag.ErrHelp {
+					return 0
+				}
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				return 1
+			}
+			if err := runGenerate(genFlags); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				return 1
+			}
+			return 0
+		case "help", "-h", "--help":
+			printUsage()
+			return 0
+		}
+	}
+
+	// Default: run simulation command
 	flags, remainingArgs, err := parseFlags(args)
 	if err != nil {
 		if err == flag.ErrHelp {
