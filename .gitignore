@@ -37,3 +37,9 @@ Thumbs.db
 *.key
 credentials.json
 secrets.yaml
+
+# Generated policy files
+*-full-access-policy.json
+*-iam-reference.json
+*-policy-documentation.md
+*-scp.json

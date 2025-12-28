@@ -203,69 +203,73 @@ func (c *LLMClient) GenerateSecurityPolicy(data *ScrapedIAMData, progress Progre
 
 	if progress != nil {
 		progress.SetProgress(len(batches), len(batches))
+		progress.SetStatus("Consolidating policy statements...")
+	}
+
+	// Consolidate: dedupe exact matches, then LLM-merge similar statements
+	consolidated, err := c.ConsolidatePolicy(allStatements, progress, concurrency)
+	if err != nil {
+		// Non-fatal: fall back to unconsolidated statements
+		consolidated = allStatements
+	}
+
+	if progress != nil {
 		progress.SetStatus("Assembling final policy...")
 	}
 
 	// Assemble final policy
-	policy := assembleFinalPolicy(allStatements)
+	policy := assembleFinalPolicy(consolidated)
 	return policy, nil
 }
 
 func getBatchSystemPrompt(userPrompt string) string {
-	basePrompt := `You are an AWS IAM security expert. Generate IAM policy statements for the specified actions.
+	basePrompt := `You are an AWS IAM security expert generating IAM policy statements.
 
 CRITICAL: Output ONLY a valid JSON array of Statement objects - no markdown, no explanations, no code fences.
+If no statements should be generated for this batch, output an empty array: []`
 
-IMPORTANT - Efficiently group actions to minimize statement count:
-1. Combine ALL actions with the same access level and resource requirements into ONE statement
+	// User requirements are PRIMARY - they override default behavior
+	if userPrompt != "" {
+		basePrompt += `
+
+## USER REQUIREMENTS (PRIMARY - follow these first):
+` + userPrompt + `
+
+IMPORTANT: The user requirements above take precedence. If the user specifies:
+- Which actions to include → ONLY generate statements for those actions, skip everything else
+- Which actions to exclude → Do NOT generate statements for those actions
+- Specific resources or ARNs → Use those exact resources, not wildcards
+- To rely on implicit deny → Do NOT generate Allow statements for actions the user wants denied
+- SCP or "SCP will handle" → Do NOT include SecureTransport conditions or deny statements - those go in the SCP
+
+If none of the actions in this batch match what the user wants, return an empty array [].`
+	}
+
+	basePrompt += `
+
+## POLICY GENERATION GUIDELINES:
+
+Efficiently group actions to minimize statement count:
+1. Combine actions with the same access level and resource requirements into ONE statement
 2. Use wildcards (e.g., "service:Get*", "service:List*", "service:Describe*") where actions share common prefixes
 3. Only create separate statements when:
    - Different resource types are required
-   - Different conditions are needed (e.g., MFA for write operations)
+   - Different conditions are needed
    - Logical security boundaries exist (read vs write vs admin)
-4. Target: Aim for 3-8 statements per batch, NOT one statement per action
 
 Statement requirements:
-- Use descriptive Sid values (e.g., "AllowBedrockReadOperations", "AllowBedrockModelInvocation")
+- Use descriptive Sid values (e.g., "AllowS3ReadOperations", "AllowBedrockModelInvocation")
 - Apply aws:SecureTransport condition for network security
-- Use MFA conditions for destructive/sensitive operations (Delete*, Update*, Put*)
+- Use MFA conditions for destructive/sensitive operations (Delete*, Update*, Put*) unless user says otherwise
 - Use specific resource ARNs where the resource type is clear
 
-IMPORTANT - Use these EXACT placeholder variables (not example values like vpce-1a2b3c4d):
+Use these placeholder variables where appropriate:
 - ${AWS::AccountId} - AWS account ID
 - ${AWS::Region} - AWS region
-- ${VpcEndpointId} - VPC endpoint ID (e.g., for aws:sourceVpce condition)
-- ${VpcId} - VPC ID
+- ${VpcEndpointId} - VPC endpoint ID
 - ${OrgId} - AWS Organization ID
-- ${OrgPath} - AWS Organization path
-- ${PrincipalTag/Department} - Principal tag value
-- ${ResourceTag/Environment} - Resource tag value
 
-The policy should be suitable for highly regulated environments (UK Government, banks, public sector).
-
-Example of EFFICIENT grouping:
-[
-  {
-    "Sid": "AllowReadAndListOperations",
-    "Effect": "Allow",
-    "Action": ["service:Get*", "service:List*", "service:Describe*"],
-    "Resource": "*",
-    "Condition": {"Bool": {"aws:SecureTransport": "true"}}
-  },
-  {
-    "Sid": "AllowWriteOperationsWithMFA",
-    "Effect": "Allow",
-    "Action": ["service:Create*", "service:Update*", "service:Put*"],
-    "Resource": "*",
-    "Condition": {
-      "Bool": {"aws:SecureTransport": "true", "aws:MultiFactorAuthPresent": "true"}
-    }
-  }
-]`
-
-	if userPrompt != "" {
-		basePrompt += "\n\n## Additional Requirements from User:\n" + userPrompt
-	}
+The policy should be suitable for regulated environments.`
 
 	return basePrompt
 }
@@ -356,6 +360,218 @@ func assembleFinalPolicy(statements []json.RawMessage) string {
 	return string(result)
 }
 
+// dedupeStatements removes exact duplicate statements using hash comparison
+func dedupeStatements(statements []json.RawMessage) []json.RawMessage {
+	seen := make(map[string]bool)
+	var result []json.RawMessage
+
+	for _, stmt := range statements {
+		// Normalize JSON by unmarshaling and remarshaling with sorted keys
+		var parsed map[string]any
+		if err := json.Unmarshal(stmt, &parsed); err != nil {
+			// Keep unparseable statements as-is
+			result = append(result, stmt)
+			continue
+		}
+
+		// Remarshal to get consistent key ordering
+		normalized, err := json.Marshal(parsed)
+		if err != nil {
+			result = append(result, stmt)
+			continue
+		}
+
+		key := string(normalized)
+		if !seen[key] {
+			seen[key] = true
+			result = append(result, stmt)
+		}
+	}
+
+	return result
+}
+
+// groupStatementsBySid groups statements by their Sid value
+func groupStatementsBySid(statements []json.RawMessage) map[string][]json.RawMessage {
+	groups := make(map[string][]json.RawMessage)
+
+	for _, stmt := range statements {
+		var parsed map[string]any
+		if err := json.Unmarshal(stmt, &parsed); err != nil {
+			// Put unparseable statements in a special group
+			groups["_unparseable"] = append(groups["_unparseable"], stmt)
+			continue
+		}
+
+		sid, ok := parsed["Sid"].(string)
+		if !ok || sid == "" {
+			sid = "_no_sid"
+		}
+
+		groups[sid] = append(groups[sid], stmt)
+	}
+
+	return groups
+}
+
+// ConsolidateStatementGroup uses LLM to merge similar statements into one
+func (c *LLMClient) ConsolidateStatementGroup(sid string, statements []json.RawMessage) (json.RawMessage, error) {
+	// Build a compact representation of the statements
+	var stmtStrings []string
+	for _, stmt := range statements {
+		stmtStrings = append(stmtStrings, string(stmt))
+	}
+
+	prompt := fmt.Sprintf(`Merge these %d IAM policy statements with Sid "%s" into a SINGLE optimized statement.
+
+Statements to merge:
+%s
+
+Rules:
+1. Combine all Actions into one array (remove duplicates)
+2. If Resources differ, use the most permissive (prefer "*" if any use it)
+3. Merge Conditions intelligently (combine values for same condition keys)
+4. Keep the same Sid name
+5. Output ONLY the single merged JSON statement object - no markdown, no explanation
+
+Merged statement:`, len(statements), sid, strings.Join(stmtStrings, "\n"))
+
+	response, err := c.ChatCompletion([]ChatMessage{
+		{Role: "user", Content: prompt},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Clean up response
+	response = strings.TrimSpace(response)
+	if strings.HasPrefix(response, "```json") {
+		response = strings.TrimPrefix(response, "```json")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
+	} else if strings.HasPrefix(response, "```") {
+		response = strings.TrimPrefix(response, "```")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
+	}
+
+	// Find JSON object
+	start := strings.Index(response, "{")
+	end := strings.LastIndex(response, "}")
+	if start >= 0 && end > start {
+		response = response[start : end+1]
+	}
+
+	// Validate it's valid JSON
+	var validated json.RawMessage
+	if err := json.Unmarshal([]byte(response), &validated); err != nil {
+		return nil, fmt.Errorf("invalid JSON from LLM: %w", err)
+	}
+
+	return validated, nil
+}
+
+// ConsolidatePolicy deduplicates and consolidates policy statements
+// Step 1: Remove exact duplicates (programmatic)
+// Step 2: Group by Sid
+// Step 3: Use LLM to merge groups with multiple statements
+func (c *LLMClient) ConsolidatePolicy(statements []json.RawMessage, progress ProgressReporter, concurrency int) ([]json.RawMessage, error) {
+	if progress != nil {
+		progress.SetStatus("Consolidating policy statements...")
+	}
+
+	// Step 1: Exact dedup
+	deduped := dedupeStatements(statements)
+	if progress != nil {
+		progress.SetStatus(fmt.Sprintf("Removed %d exact duplicates (%d → %d statements)",
+			len(statements)-len(deduped), len(statements), len(deduped)))
+	}
+
+	// Step 2: Group by Sid
+	groups := groupStatementsBySid(deduped)
+
+	// Count groups needing consolidation
+	var groupsToMerge []string
+	for sid, stmts := range groups {
+		if len(stmts) > 1 && sid != "_unparseable" && sid != "_no_sid" {
+			groupsToMerge = append(groupsToMerge, sid)
+		}
+	}
+
+	if len(groupsToMerge) == 0 {
+		// No merging needed, return deduped statements
+		var result []json.RawMessage
+		for _, stmts := range groups {
+			result = append(result, stmts...)
+		}
+		return result, nil
+	}
+
+	if progress != nil {
+		progress.SetStatus(fmt.Sprintf("Merging %d statement groups with LLM...", len(groupsToMerge)))
+	}
+
+	// Step 3: Merge groups in parallel
+	if concurrency <= 0 {
+		concurrency = 3
+	}
+
+	type mergeResult struct {
+		sid  string
+		stmt json.RawMessage
+		err  error
+	}
+
+	results := make(chan mergeResult, len(groupsToMerge))
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
+	for _, sid := range groupsToMerge {
+		wg.Add(1)
+		go func(s string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			merged, err := c.ConsolidateStatementGroup(s, groups[s])
+			results <- mergeResult{sid: s, stmt: merged, err: err}
+		}(sid)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	mergedGroups := make(map[string]json.RawMessage)
+	for result := range results {
+		if result.err != nil {
+			// On error, keep original statements for this group
+			continue
+		}
+		mergedGroups[result.sid] = result.stmt
+	}
+
+	// Assemble final statement list
+	var finalStatements []json.RawMessage
+	for sid, stmts := range groups {
+		if merged, ok := mergedGroups[sid]; ok {
+			// Use merged statement
+			finalStatements = append(finalStatements, merged)
+		} else {
+			// Use original statements (single stmt groups, or merge failed)
+			finalStatements = append(finalStatements, stmts...)
+		}
+	}
+
+	if progress != nil {
+		progress.SetStatus(fmt.Sprintf("Consolidated to %d statements", len(finalStatements)))
+	}
+
+	return finalStatements, nil
+}
+
 // EnrichActionDescriptions uses the LLM to add security context to actions
 func (c *LLMClient) EnrichActionDescriptions(data *ScrapedIAMData, progress ProgressReporter) error {
 	if progress != nil {
@@ -439,6 +655,205 @@ Output ONLY the Markdown content, no code fences around it.`, data.ServiceName, 
 	}
 
 	// Clean up response - remove any markdown code fences if present
+	response = strings.TrimSpace(response)
+	if strings.HasPrefix(response, "```markdown") {
+		response = strings.TrimPrefix(response, "```markdown")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
+	} else if strings.HasPrefix(response, "```md") {
+		response = strings.TrimPrefix(response, "```md")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
+	} else if strings.HasPrefix(response, "```") {
+		response = strings.TrimPrefix(response, "```")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
+	}
+
+	return response, nil
+}
+
+// GenerateSCP generates a Service Control Policy based on the identity policy and user requirements
+func (c *LLMClient) GenerateSCP(data *ScrapedIAMData, identityPolicyJSON string, userPrompt string) (string, error) {
+	prompt := fmt.Sprintf(`Generate a Service Control Policy (SCP) to complement the following identity policy.
+
+## Service Information
+- Service Name: %s
+- Service Prefix: %s
+
+## Identity Policy (already created)
+%s
+
+## User Requirements
+%s
+
+## SCP Generation Guidelines
+
+Use the "deny all except allowlist" pattern with NotAction. This is the standard enterprise SCP pattern.
+
+CRITICAL STRUCTURE - Use NotAction to deny everything EXCEPT allowed actions:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyAllExceptAllowedActions",
+      "Effect": "Deny",
+      "NotAction": [
+        "service:AllowedAction1",
+        "service:AllowedAction2",
+        "service:Get*",
+        "service:List*",
+        "service:Describe*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Action": "service:*",
+      "Resource": "*",
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyOutsideAllowedRegions",
+      "Effect": "Deny",
+      "Action": "service:*",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEqualsIfExists": {
+          "aws:RequestedRegion": ["eu-west-2"]
+        }
+      }
+    },
+    {
+      "Sid": "DenyGlobalCrossRegionInference",
+      "Effect": "Deny",
+      "Action": ["service:InvokeModel", "service:InvokeModelWithResponseStream"],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "unspecified"
+        }
+      }
+    }
+  ]
+}
+
+Guidelines:
+1. Extract the ALLOWED actions from the identity policy and put them in NotAction
+2. Include Get*, List*, Describe* wildcards in NotAction for read operations
+3. Add DenyInsecureTransport statement (deny when aws:SecureTransport = false)
+4. Add region restriction statement using StringNotEqualsIfExists
+5. Add global CRIS denial for invoke actions (aws:RequestedRegion = "unspecified")
+6. Keep statements minimal - the NotAction pattern handles most denials in one statement
+
+Output ONLY valid JSON for an SCP policy document. No markdown, no explanations.`, data.ServiceName, data.ServicePrefix, identityPolicyJSON, userPrompt)
+
+	response, err := c.ChatCompletion([]ChatMessage{
+		{Role: "user", Content: prompt},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to generate SCP: %w", err)
+	}
+
+	// Clean up response
+	response = strings.TrimSpace(response)
+	if strings.HasPrefix(response, "```json") {
+		response = strings.TrimPrefix(response, "```json")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
+	} else if strings.HasPrefix(response, "```") {
+		response = strings.TrimPrefix(response, "```")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
+	}
+
+	// Find JSON object
+	start := strings.Index(response, "{")
+	end := strings.LastIndex(response, "}")
+	if start >= 0 && end > start {
+		response = response[start : end+1]
+	}
+
+	// Validate JSON
+	var js json.RawMessage
+	if err := json.Unmarshal([]byte(response), &js); err != nil {
+		return "", fmt.Errorf("invalid SCP JSON: %w", err)
+	}
+
+	return response, nil
+}
+
+// GenerateCombinedDocumentation generates documentation covering both identity policy and SCP
+func (c *LLMClient) GenerateCombinedDocumentation(data *ScrapedIAMData, identityPolicyJSON, scpJSON string) (string, error) {
+	prompt := fmt.Sprintf(`Generate comprehensive Markdown documentation for the following IAM Identity Policy and Service Control Policy (SCP).
+
+## Service Information
+- Service Name: %s
+- Service Prefix: %s
+- Total Actions Available: %d
+
+## Identity Policy
+%s
+
+## Service Control Policy (SCP)
+%s
+
+## Documentation Requirements
+
+Create a well-structured Markdown document that includes:
+
+1. **Overview Section**:
+   - Brief description of the overall access control strategy
+   - Explain the separation between identity policy (what users CAN do) and SCP (org-wide guardrails)
+
+2. **Identity Policy Documentation**:
+   - Purpose: What this policy allows
+   - Statement-by-statement breakdown
+   - Actions, resources, and conditions explained
+   - Who should have this policy attached
+
+3. **SCP Documentation**:
+   - Purpose: What org-wide guardrails this provides
+   - Statement-by-statement breakdown
+   - Why these denies are at the SCP level (cannot be bypassed)
+   - Which OUs/accounts this should be applied to
+
+4. **Deployment Guide**:
+   - Step 1: Deploy SCP to AWS Organizations (specify OU or account targets)
+   - Step 2: Attach identity policy to IAM roles/users
+   - Testing recommendations
+   - Rollback procedures
+
+5. **Variables to Configure**:
+   - List ALL placeholder variables from BOTH policies
+   - Description, example values, and where to find them
+
+6. **Security Summary**:
+   - Defense in depth explanation (identity + SCP layers)
+   - Key security controls in place
+   - Compliance considerations (UK Gov, financial sector, regulated environments)
+
+7. **Troubleshooting**:
+   - Common access denied scenarios
+   - How to diagnose SCP vs identity policy denials
+   - CloudTrail event patterns to look for
+
+Output ONLY the Markdown content, no code fences around it.`, data.ServiceName, data.ServicePrefix, len(data.Actions), identityPolicyJSON, scpJSON)
+
+	response, err := c.ChatCompletion([]ChatMessage{
+		{Role: "user", Content: prompt},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to generate combined documentation: %w", err)
+	}
+
+	// Clean up response
 	response = strings.TrimSpace(response)
 	if strings.HasPrefix(response, "```markdown") {
 		response = strings.TrimPrefix(response, "```markdown")

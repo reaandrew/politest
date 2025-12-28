@@ -20,6 +20,7 @@ type GenerateConfig struct {
 	Quiet       bool   // Suppress progress output
 	UserPrompt  string // User's custom requirements/constraints
 	Concurrency int    // Number of parallel batch requests (default 3)
+	GenerateSCP bool   // Generate companion SCP for org-wide guardrails
 }
 
 // GenerateOutput holds the output of the generate command
@@ -27,6 +28,8 @@ type GenerateOutput struct {
 	ScrapedData *ScrapedIAMData `json:"scraped_data"`
 	Policy      json.RawMessage `json:"policy"`
 	PolicyFile  string          `json:"policy_file"`
+	SCPPolicy   json.RawMessage `json:"scp_policy,omitempty"`
+	SCPFile     string          `json:"scp_file,omitempty"`
 	ScrapedFile string          `json:"scraped_file"`
 	DocsFile    string          `json:"docs_file"`
 	ServiceName string          `json:"service_name"`
@@ -115,7 +118,7 @@ func RunGenerate(cfg GenerateConfig, writer io.Writer) (*GenerateOutput, error) 
 	}
 	output.ScrapedFile = scrapedFilePath
 
-	// Write policy file
+	// Write policy file (always same name)
 	policyFileName := fmt.Sprintf("%s-full-access-policy.json", scrapedData.ServicePrefix)
 	policyFilePath := filepath.Join(outputDir, policyFileName)
 	if err := os.WriteFile(policyFilePath, prettyPolicy, 0600); err != nil {
@@ -123,11 +126,45 @@ func RunGenerate(cfg GenerateConfig, writer io.Writer) (*GenerateOutput, error) 
 	}
 	output.PolicyFile = policyFilePath
 
-	// Generate documentation for the policy
+	// Generate SCP if requested
+	var prettySCP []byte
+	var scpFilePath string
+	if cfg.GenerateSCP {
+		if progress != nil {
+			progress.SetStatus("Generating Service Control Policy (SCP)...")
+		}
+		scpJSON, err := llmClient.GenerateSCP(scrapedData, string(prettyPolicy), cfg.UserPrompt)
+		if err != nil {
+			if progress != nil {
+				progress.SetStatus(fmt.Sprintf("SCP generation failed: %v", err))
+			}
+			// Non-fatal - continue without SCP
+		} else {
+			var scpData any
+			if err := json.Unmarshal([]byte(scpJSON), &scpData); err == nil {
+				prettySCP, _ = json.MarshalIndent(scpData, "", "  ")
+				output.SCPPolicy = prettySCP
+
+				scpFileName := fmt.Sprintf("%s-scp.json", scrapedData.ServicePrefix)
+				scpFilePath = filepath.Join(outputDir, scpFileName)
+				if err := os.WriteFile(scpFilePath, prettySCP, 0600); err != nil {
+					return nil, fmt.Errorf("failed to write SCP: %w", err)
+				}
+				output.SCPFile = scpFilePath
+			}
+		}
+	}
+
+	// Generate documentation for the policy (and SCP if generated)
 	if progress != nil {
 		progress.SetStatus("Generating policy documentation...")
 	}
-	docsMarkdown, err := llmClient.GeneratePolicyDocumentation(scrapedData, string(prettyPolicy))
+	var docsMarkdown string
+	if cfg.GenerateSCP && len(prettySCP) > 0 {
+		docsMarkdown, err = llmClient.GenerateCombinedDocumentation(scrapedData, string(prettyPolicy), string(prettySCP))
+	} else {
+		docsMarkdown, err = llmClient.GeneratePolicyDocumentation(scrapedData, string(prettyPolicy))
+	}
 	if err != nil {
 		// Non-fatal - continue without docs
 		if progress != nil {
@@ -160,6 +197,9 @@ func RunGenerate(cfg GenerateConfig, writer io.Writer) (*GenerateOutput, error) 
 		fmt.Fprintf(writer, "\033[32mOutput Files:\033[0m\n")
 		fmt.Fprintf(writer, "  IAM Reference:   %s\n", scrapedFilePath)
 		fmt.Fprintf(writer, "  Policy:          %s\n", policyFilePath)
+		if cfg.GenerateSCP && scpFilePath != "" {
+			fmt.Fprintf(writer, "  SCP:             %s\n", scpFilePath)
+		}
 		if output.DocsFile != "" {
 			fmt.Fprintf(writer, "  Documentation:   %s\n", output.DocsFile)
 		}

@@ -361,6 +361,7 @@ type generateFlags struct {
 	quiet       bool
 	prompt      string
 	concurrency int
+	generateSCP bool
 }
 
 // parseGenerateFlags parses command-line arguments for the generate command
@@ -378,6 +379,7 @@ func parseGenerateFlags(args []string) (*generateFlags, error) {
 	fs.BoolVar(&flags.quiet, "quiet", false, "Suppress progress output")
 	fs.StringVar(&flags.prompt, "prompt", "", "Custom requirements/constraints to include in LLM prompt")
 	fs.IntVar(&flags.concurrency, "concurrency", 3, "Number of parallel batch requests")
+	fs.BoolVar(&flags.generateSCP, "scp", false, "Generate companion SCP for org-wide guardrails")
 
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: politest generate [options]\n\n")
@@ -414,6 +416,7 @@ func runGenerate(flags *generateFlags) error {
 		Quiet:       flags.quiet,
 		UserPrompt:  flags.prompt,
 		Concurrency: flags.concurrency,
+		GenerateSCP: flags.generateSCP,
 	}
 
 	if err := internal.ValidateGenerateConfig(cfg); err != nil {
