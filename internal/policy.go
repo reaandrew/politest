@@ -11,6 +11,28 @@ import (
 	"strings"
 )
 
+// validIAMTopLevelFields defines the valid top-level fields in an IAM policy document.
+// Used by ValidateIAMFields and stripPolicyDocument.
+var validIAMTopLevelFields = map[string]bool{
+	"Version":   true,
+	"Id":        true,
+	"Statement": true,
+}
+
+// validIAMStatementFields defines the valid fields in an IAM policy statement.
+// Used by stripStatementFields and findInvalidStatementFields.
+var validIAMStatementFields = map[string]bool{
+	"Sid":          true,
+	"Effect":       true,
+	"Principal":    true,
+	"NotPrincipal": true,
+	"Action":       true,
+	"NotAction":    true,
+	"Resource":     true,
+	"NotResource":  true,
+	"Condition":    true,
+}
+
 // ExpandGlobsRelative expands glob patterns relative to a base directory
 func ExpandGlobsRelative(base string, patterns []string) []string {
 	var files []string
@@ -313,14 +335,8 @@ func ValidateIAMFields(policyJSON string) error {
 	var violations []string
 
 	// Check top-level fields
-	validTopLevel := map[string]bool{
-		"Version":   true,
-		"Id":        true,
-		"Statement": true,
-	}
-
 	for field := range policy {
-		if !validTopLevel[field] {
+		if !validIAMTopLevelFields[field] {
 			violations = append(violations, fmt.Sprintf("  Top-level: %s", field))
 		}
 	}
@@ -347,15 +363,8 @@ func ValidateIAMFields(policyJSON string) error {
 func stripPolicyDocument(policy map[string]any) map[string]any {
 	result := make(map[string]any)
 
-	// Valid IAM policy top-level fields
-	validTopLevel := map[string]bool{
-		"Version":   true, // Required
-		"Id":        true, // Optional
-		"Statement": true, // Required
-	}
-
 	for field, value := range policy {
-		if !validTopLevel[field] {
+		if !validIAMTopLevelFields[field] {
 			continue // Skip non-IAM fields
 		}
 
@@ -390,22 +399,9 @@ func stripStatements(statementsRaw any) any {
 }
 
 func stripStatementFields(stmt map[string]any) map[string]any {
-	// Valid IAM statement fields per AWS documentation
-	validFields := map[string]bool{
-		"Sid":          true, // Optional statement ID
-		"Effect":       true, // Required: Allow or Deny
-		"Principal":    true, // For resource-based policies
-		"NotPrincipal": true,
-		"Action":       true,
-		"NotAction":    true,
-		"Resource":     true,
-		"NotResource":  true,
-		"Condition":    true, // Optional conditions
-	}
-
 	result := make(map[string]any)
 	for field, value := range stmt {
-		if validFields[field] {
+		if validIAMStatementFields[field] {
 			result[field] = value
 		}
 	}
@@ -414,21 +410,9 @@ func stripStatementFields(stmt map[string]any) map[string]any {
 }
 
 func findInvalidStatementFields(stmt map[string]any) []string {
-	validFields := map[string]bool{
-		"Sid":          true,
-		"Effect":       true,
-		"Principal":    true,
-		"NotPrincipal": true,
-		"Action":       true,
-		"NotAction":    true,
-		"Resource":     true,
-		"NotResource":  true,
-		"Condition":    true,
-	}
-
 	var invalid []string
 	for field := range stmt {
-		if !validFields[field] {
+		if !validIAMStatementFields[field] {
 			invalid = append(invalid, field)
 		}
 	}
