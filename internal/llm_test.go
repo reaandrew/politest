@@ -1175,3 +1175,333 @@ func (m *mockProgress) SetStatus(status string) {
 func (m *mockProgress) SetProgress(current, total int) {
 	m.progressCalls++
 }
+
+func TestConsolidateStatementGroupWithMarkdownFences(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+	}{
+		{
+			name:     "json code fence",
+			response: "```json\n{\"Sid\": \"Test\", \"Effect\": \"Allow\"}\n```",
+		},
+		{
+			name:     "plain code fence",
+			response: "```\n{\"Sid\": \"Test\", \"Effect\": \"Allow\"}\n```",
+		},
+		{
+			name:     "with surrounding text",
+			response: "Here is the merged statement:\n{\"Sid\": \"Test\", \"Effect\": \"Allow\"}\nDone.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				respJSON, _ := json.Marshal(map[string]any{
+					"choices": []map[string]any{
+						{"message": map[string]any{"content": tt.response}},
+					},
+				})
+				w.Write(respJSON)
+			}))
+			defer server.Close()
+
+			client := NewLLMClient(server.URL, "test-key", "test-model")
+			statements := []json.RawMessage{json.RawMessage(`{"Sid": "Test"}`)}
+
+			result, err := client.ConsolidateStatementGroup("Test", statements)
+			if err != nil {
+				t.Errorf("ConsolidateStatementGroup() error = %v", err)
+			}
+			if result == nil {
+				t.Error("ConsolidateStatementGroup() returned nil")
+			}
+		})
+	}
+}
+
+func TestConsolidateStatementGroupAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error": "server error"}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+	statements := []json.RawMessage{json.RawMessage(`{"Sid": "Test"}`)}
+
+	_, err := client.ConsolidateStatementGroup("Test", statements)
+	if err == nil {
+		t.Error("ConsolidateStatementGroup() expected error for API failure, got nil")
+	}
+}
+
+func TestGenerateSecurityPolicyWithProgress(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "[{\"Sid\": \"Test\", \"Effect\": \"Allow\", \"Action\": [\"s3:GetObject\"], \"Resource\": \"*\"}]"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+	progress := &mockProgress{}
+
+	data := &ScrapedIAMData{
+		ServiceName:   "Amazon S3",
+		ServicePrefix: "s3",
+		Actions: []IAMAction{
+			{Name: "GetObject", AccessLevel: "Read", Description: "Get object"},
+		},
+	}
+
+	result, err := client.GenerateSecurityPolicy(data, progress, "", 1)
+
+	if err != nil {
+		t.Errorf("GenerateSecurityPolicy() unexpected error: %v", err)
+	}
+	if result == "" {
+		t.Error("GenerateSecurityPolicy() returned empty string")
+	}
+	if progress.statusCalls == 0 {
+		t.Error("GenerateSecurityPolicy() should call progress.SetStatus()")
+	}
+	if progress.progressCalls == 0 {
+		t.Error("GenerateSecurityPolicy() should call progress.SetProgress()")
+	}
+}
+
+func TestGenerateSecurityPolicyDefaultConcurrency(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "[{\"Sid\": \"Test\", \"Effect\": \"Allow\"}]"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	data := &ScrapedIAMData{
+		ServicePrefix: "s3",
+		Actions:       []IAMAction{{Name: "GetObject", AccessLevel: "Read"}},
+	}
+
+	// Test with 0 concurrency (should default to 3)
+	_, err := client.GenerateSecurityPolicy(data, nil, "", 0)
+	if err != nil {
+		t.Errorf("GenerateSecurityPolicy() with 0 concurrency error: %v", err)
+	}
+
+	// Test with negative concurrency (should default to 3)
+	_, err = client.GenerateSecurityPolicy(data, nil, "", -1)
+	if err != nil {
+		t.Errorf("GenerateSecurityPolicy() with -1 concurrency error: %v", err)
+	}
+}
+
+func TestGenerateSecurityPolicyEmptyAccessLevel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "[{\"Sid\": \"Test\", \"Effect\": \"Allow\"}]"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	data := &ScrapedIAMData{
+		ServicePrefix: "s3",
+		Actions: []IAMAction{
+			{Name: "GetObject", AccessLevel: ""}, // Empty access level should become "Unknown"
+		},
+	}
+
+	_, err := client.GenerateSecurityPolicy(data, nil, "", 1)
+	if err != nil {
+		t.Errorf("GenerateSecurityPolicy() with empty access level error: %v", err)
+	}
+}
+
+func TestGenerateSecurityPolicyBatchError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error": "server error"}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	data := &ScrapedIAMData{
+		ServicePrefix: "s3",
+		Actions:       []IAMAction{{Name: "GetObject", AccessLevel: "Read"}},
+	}
+
+	_, err := client.GenerateSecurityPolicy(data, nil, "", 1)
+	if err == nil {
+		t.Error("GenerateSecurityPolicy() expected error for batch failure, got nil")
+	}
+}
+
+func TestGenerateSecurityPolicyMultipleBatches(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "[{\"Sid\": \"Test\", \"Effect\": \"Allow\"}]"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	// Create 35 actions to trigger multiple batches (batch size is 30)
+	actions := make([]IAMAction, 35)
+	for i := range actions {
+		actions[i] = IAMAction{Name: "Action" + string(rune('A'+i%26)), AccessLevel: "Read"}
+	}
+
+	data := &ScrapedIAMData{
+		ServicePrefix: "s3",
+		Actions:       actions,
+	}
+
+	_, err := client.GenerateSecurityPolicy(data, nil, "", 2)
+	if err != nil {
+		t.Errorf("GenerateSecurityPolicy() with multiple batches error: %v", err)
+	}
+}
+
+func TestChatCompletionHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error": {"message": "bad request"}}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	_, err := client.ChatCompletion([]ChatMessage{{Role: "user", Content: "test"}})
+	if err == nil {
+		t.Error("ChatCompletion() expected error for HTTP error, got nil")
+	}
+}
+
+func TestChatCompletionInvalidResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`not valid json`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	_, err := client.ChatCompletion([]ChatMessage{{Role: "user", Content: "test"}})
+	if err == nil {
+		t.Error("ChatCompletion() expected error for invalid JSON response, got nil")
+	}
+}
+
+func TestChatCompletionEmptyChoices(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": []}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	_, err := client.ChatCompletion([]ChatMessage{{Role: "user", Content: "test"}})
+	if err == nil {
+		t.Error("ChatCompletion() expected error for empty choices, got nil")
+	}
+}
+
+func TestDoRequestWithAPIKey(t *testing.T) {
+	var receivedAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "test"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-api-key", "test-model")
+	_, err := client.ChatCompletion([]ChatMessage{{Role: "user", Content: "test"}})
+
+	if err != nil {
+		t.Errorf("ChatCompletion() error: %v", err)
+	}
+	if receivedAuth != "Bearer test-api-key" {
+		t.Errorf("Authorization header = %q, want %q", receivedAuth, "Bearer test-api-key")
+	}
+}
+
+func TestDoRequestWithoutAPIKey(t *testing.T) {
+	var receivedAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "test"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "", "test-model")
+	_, err := client.ChatCompletion([]ChatMessage{{Role: "user", Content: "test"}})
+
+	if err != nil {
+		t.Errorf("ChatCompletion() error: %v", err)
+	}
+	if receivedAuth != "" {
+		t.Errorf("Authorization header should be empty, got %q", receivedAuth)
+	}
+}
+
+func TestEnrichActionDescriptionsWithProgress(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "{\"actions\": [{\"name\": \"GetObject\", \"risk\": \"Low\", \"security_note\": \"Read only\"}]}"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+	progress := &mockProgress{}
+
+	data := &ScrapedIAMData{
+		ServicePrefix: "s3",
+		Actions: []IAMAction{
+			{Name: "GetObject", AccessLevel: "Read"},
+		},
+	}
+
+	err := client.EnrichActionDescriptions(data, progress)
+	if err != nil {
+		t.Errorf("EnrichActionDescriptions() unexpected error: %v", err)
+	}
+	if progress.statusCalls == 0 {
+		t.Error("EnrichActionDescriptions() should call progress.SetStatus()")
+	}
+}
+
+func TestEnrichActionDescriptionsManyActions(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "{\"actions\": []}"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	// Create more than 20 actions to trigger multiple batches
+	actions := make([]IAMAction, 25)
+	for i := range actions {
+		actions[i] = IAMAction{Name: "Action" + string(rune('A'+i%26)), AccessLevel: "Read"}
+	}
+
+	data := &ScrapedIAMData{
+		ServicePrefix: "s3",
+		Actions:       actions,
+	}
+
+	err := client.EnrichActionDescriptions(data, nil)
+	if err != nil {
+		t.Errorf("EnrichActionDescriptions() with many actions error: %v", err)
+	}
+}

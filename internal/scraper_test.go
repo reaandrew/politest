@@ -949,3 +949,358 @@ func TestScrapeIAMDocumentationInvalidURL(t *testing.T) {
 		t.Errorf("ScrapeIAMDocumentation() error = %v, want error about invalid URL", err)
 	}
 }
+
+func TestLoadFromCacheValidEntry(t *testing.T) {
+	// Create a valid cache entry in the actual cache directory
+	cacheDir := getCacheDir()
+	if cacheDir == "" {
+		t.Skip("Could not determine cache directory")
+	}
+
+	testURL := "https://test.politest.example.com/cache-valid-test"
+	cacheKey := getCacheKey(testURL)
+	cachePath := filepath.Join(cacheDir, cacheKey)
+
+	// Ensure cache directory exists
+	if err := os.MkdirAll(cacheDir, 0750); err != nil {
+		t.Fatalf("Failed to create cache directory: %v", err)
+	}
+
+	// Create a valid cache entry
+	entry := cacheEntry{
+		URL:       testURL,
+		Content:   "<html><body>Test cached content</body></html>",
+		CachedAt:  time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("Failed to marshal cache entry: %v", err)
+	}
+
+	if err := os.WriteFile(cachePath, data, 0600); err != nil {
+		t.Fatalf("Failed to write cache file: %v", err)
+	}
+	defer os.Remove(cachePath)
+
+	// Test loading from cache
+	content, ok := loadFromCache(testURL)
+	if !ok {
+		t.Error("loadFromCache() should return true for valid cache entry")
+	}
+	if content != entry.Content {
+		t.Errorf("loadFromCache() content = %q, want %q", content, entry.Content)
+	}
+}
+
+func TestLoadFromCacheExpiredEntry(t *testing.T) {
+	cacheDir := getCacheDir()
+	if cacheDir == "" {
+		t.Skip("Could not determine cache directory")
+	}
+
+	testURL := "https://test.politest.example.com/cache-expired-test"
+	cacheKey := getCacheKey(testURL)
+	cachePath := filepath.Join(cacheDir, cacheKey)
+
+	// Ensure cache directory exists
+	if err := os.MkdirAll(cacheDir, 0750); err != nil {
+		t.Fatalf("Failed to create cache directory: %v", err)
+	}
+
+	// Create an expired cache entry
+	entry := cacheEntry{
+		URL:       testURL,
+		Content:   "expired content",
+		CachedAt:  time.Now().Add(-48 * time.Hour),
+		ExpiresAt: time.Now().Add(-24 * time.Hour), // Expired
+	}
+
+	data, _ := json.Marshal(entry)
+	os.WriteFile(cachePath, data, 0600)
+	defer os.Remove(cachePath)
+
+	// Test loading expired cache
+	content, ok := loadFromCache(testURL)
+	if ok {
+		t.Error("loadFromCache() should return false for expired cache entry")
+	}
+	if content != "" {
+		t.Errorf("loadFromCache() should return empty content for expired entry, got: %s", content)
+	}
+}
+
+func TestLoadFromCacheInvalidJSONEntry(t *testing.T) {
+	cacheDir := getCacheDir()
+	if cacheDir == "" {
+		t.Skip("Could not determine cache directory")
+	}
+
+	testURL := "https://test.politest.example.com/cache-invalid-json-test"
+	cacheKey := getCacheKey(testURL)
+	cachePath := filepath.Join(cacheDir, cacheKey)
+
+	// Ensure cache directory exists
+	if err := os.MkdirAll(cacheDir, 0750); err != nil {
+		t.Fatalf("Failed to create cache directory: %v", err)
+	}
+
+	// Write invalid JSON
+	os.WriteFile(cachePath, []byte("not valid json {{{"), 0600)
+	defer os.Remove(cachePath)
+
+	// Test loading invalid JSON
+	content, ok := loadFromCache(testURL)
+	if ok {
+		t.Error("loadFromCache() should return false for invalid JSON")
+	}
+	if content != "" {
+		t.Errorf("loadFromCache() should return empty content for invalid JSON, got: %s", content)
+	}
+}
+
+func TestSaveToCacheAndLoad(t *testing.T) {
+	testURL := "https://test.politest.example.com/save-load-test"
+	testContent := "<html><body>Test save and load</body></html>"
+
+	// Save to cache
+	saveToCache(testURL, testContent)
+
+	// Clean up after test
+	cacheDir := getCacheDir()
+	if cacheDir != "" {
+		cachePath := filepath.Join(cacheDir, getCacheKey(testURL))
+		defer os.Remove(cachePath)
+	}
+
+	// Load from cache
+	content, ok := loadFromCache(testURL)
+	if !ok {
+		t.Error("loadFromCache() should return true after saveToCache()")
+	}
+	if content != testContent {
+		t.Errorf("loadFromCache() content = %q, want %q", content, testContent)
+	}
+}
+
+func TestExtractServiceInfoFromTitle(t *testing.T) {
+	htmlContent := `
+		<html>
+			<head><title>Actions, resources, and condition keys for AWS Lambda - Service Authorization Reference</title></head>
+			<body>
+				<h1>Actions, resources, and condition keys for AWS Lambda</h1>
+				<p>AWS Lambda (service prefix: <code>lambda</code>)</p>
+			</body>
+		</html>
+	`
+
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse HTML: %v", err)
+	}
+
+	name, prefix := extractServiceInfo(doc)
+	if prefix != "lambda" {
+		t.Errorf("prefix = %q, want lambda", prefix)
+	}
+	if !strings.Contains(name, "Lambda") {
+		t.Errorf("name = %q, want to contain Lambda", name)
+	}
+}
+
+func TestParseIAMDocumentationWithProgress(t *testing.T) {
+	htmlContent := `
+		<html>
+			<body>
+				<p>Test Service (service prefix: <code>test</code>)</p>
+				<table>
+					<tr><th>Actions</th><th>Description</th><th>Access level</th></tr>
+					<tr><td>TestAction</td><td>Test description</td><td>Read</td></tr>
+				</table>
+			</body>
+		</html>
+	`
+
+	progress := &testProgress{}
+	data, err := parseIAMDocumentation(htmlContent, "https://test.example.com", progress)
+	if err != nil {
+		t.Fatalf("parseIAMDocumentation() error: %v", err)
+	}
+
+	if data.ServicePrefix != "test" {
+		t.Errorf("ServicePrefix = %q, want test", data.ServicePrefix)
+	}
+	if progress.statusCalls == 0 {
+		t.Error("parseIAMDocumentation() should call progress.SetStatus()")
+	}
+}
+
+type testProgress struct {
+	statusCalls int
+}
+
+func (p *testProgress) SetStatus(status string) {
+	p.statusCalls++
+}
+
+func (p *testProgress) SetProgress(current, total int) {}
+
+func TestExtractActionsWithDependentActions(t *testing.T) {
+	htmlContent := `
+		<html>
+			<body>
+				<table>
+					<tr>
+						<th>Actions</th>
+						<th>Description</th>
+						<th>Access level</th>
+						<th>Resource types</th>
+						<th>Condition keys</th>
+						<th>Dependent actions</th>
+					</tr>
+					<tr>
+						<td>GetObject</td>
+						<td>Gets an object</td>
+						<td>Read</td>
+						<td>object*</td>
+						<td>s3:authType</td>
+						<td>s3:ListBucket</td>
+					</tr>
+				</table>
+			</body>
+		</html>
+	`
+
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse HTML: %v", err)
+	}
+
+	actions := extractActions(doc, nil)
+
+	if len(actions) != 1 {
+		t.Fatalf("extractActions() = %d actions, want 1", len(actions))
+	}
+
+	if actions[0].Name != "GetObject" {
+		t.Errorf("actions[0].Name = %q, want GetObject", actions[0].Name)
+	}
+}
+
+func TestExtractActionsEmptyTable(t *testing.T) {
+	htmlContent := `
+		<html>
+			<body>
+				<table>
+					<tr><th>Actions</th><th>Description</th><th>Access level</th></tr>
+				</table>
+			</body>
+		</html>
+	`
+
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse HTML: %v", err)
+	}
+
+	actions := extractActions(doc, nil)
+	if len(actions) != 0 {
+		t.Errorf("extractActions() = %d actions, want 0 for empty table", len(actions))
+	}
+}
+
+func TestParseActionRowMinimalCells(t *testing.T) {
+	// Test with less than 3 cells
+	htmlContent := `<html><body><table><tr><td>OnlyOne</td></tr></table></body></html>`
+
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse HTML: %v", err)
+	}
+
+	cells := findElements(doc, "td")
+	action := parseActionRow(cells)
+
+	// Should handle gracefully
+	if action.Name != "OnlyOne" {
+		t.Errorf("Name = %q, want OnlyOne", action.Name)
+	}
+}
+
+func TestExtractConditionKeysEmptyTable(t *testing.T) {
+	htmlContent := `
+		<html>
+			<body>
+				<table>
+					<tr><th>Condition keys</th><th>Description</th><th>Type</th></tr>
+				</table>
+			</body>
+		</html>
+	`
+
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse HTML: %v", err)
+	}
+
+	keys := extractConditionKeys(doc)
+	if len(keys) != 0 {
+		t.Errorf("extractConditionKeys() = %d keys, want 0 for empty table", len(keys))
+	}
+}
+
+func TestExtractResourceTypesEmptyTable(t *testing.T) {
+	htmlContent := `
+		<html>
+			<body>
+				<table>
+					<tr><th>Resource types</th><th>ARN</th><th>Condition keys</th></tr>
+				</table>
+			</body>
+		</html>
+	`
+
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse HTML: %v", err)
+	}
+
+	resources := extractResourceTypes(doc)
+	if len(resources) != 0 {
+		t.Errorf("extractResourceTypes() = %d resources, want 0 for empty table", len(resources))
+	}
+}
+
+func TestFindElementsNoMatches(t *testing.T) {
+	htmlContent := `<html><body><p>No tables here</p></body></html>`
+
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse HTML: %v", err)
+	}
+
+	elements := findElements(doc, "table")
+	if len(elements) != 0 {
+		t.Errorf("findElements() = %d elements, want 0", len(elements))
+	}
+}
+
+func TestExtractTableHeadersNoTH(t *testing.T) {
+	htmlContent := `<html><body><table><tr><td>Not a header</td></tr></table></body></html>`
+
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		t.Fatalf("Failed to parse HTML: %v", err)
+	}
+
+	tables := findElements(doc, "table")
+	if len(tables) == 0 {
+		t.Fatal("No tables found")
+	}
+
+	headers := extractTableHeaders(tables[0])
+	if len(headers) != 0 {
+		t.Errorf("extractTableHeaders() = %d headers, want 0 for table without th", len(headers))
+	}
+}
