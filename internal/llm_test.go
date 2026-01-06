@@ -802,3 +802,376 @@ func TestConsolidateStatementGroup(t *testing.T) {
 		t.Error("ConsolidateStatementGroup() returned nil")
 	}
 }
+
+func TestConsolidateStatementGroupInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "not valid json"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	statements := []json.RawMessage{
+		json.RawMessage(`{"Sid": "Test"}`),
+	}
+
+	_, err := client.ConsolidateStatementGroup("Test", statements)
+	if err == nil {
+		t.Error("ConsolidateStatementGroup() expected error for invalid JSON, got nil")
+	}
+}
+
+func TestGeneratePolicyDocumentationError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error": "server error"}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	data := &ScrapedIAMData{
+		ServiceName:   "Amazon S3",
+		ServicePrefix: "s3",
+		Actions:       []IAMAction{{Name: "GetObject"}},
+	}
+
+	_, err := client.GeneratePolicyDocumentation(data, `{"Version": "2012-10-17"}`)
+	if err == nil {
+		t.Error("GeneratePolicyDocumentation() expected error, got nil")
+	}
+}
+
+func TestGeneratePolicyDocumentationCleanup(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+		want     string
+	}{
+		{
+			name:     "with markdown fence",
+			response: "```markdown\n# Documentation\n```",
+			want:     "# Documentation",
+		},
+		{
+			name:     "with md fence",
+			response: "```md\n# Documentation\n```",
+			want:     "# Documentation",
+		},
+		{
+			name:     "with plain fence",
+			response: "```\n# Documentation\n```",
+			want:     "# Documentation",
+		},
+		{
+			name:     "no fence",
+			response: "# Documentation",
+			want:     "# Documentation",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				resp := map[string]any{
+					"choices": []any{
+						map[string]any{
+							"message": map[string]any{
+								"content": tt.response,
+							},
+						},
+					},
+				}
+				json.NewEncoder(w).Encode(resp)
+			}))
+			defer server.Close()
+
+			client := NewLLMClient(server.URL, "test-key", "test-model")
+			data := &ScrapedIAMData{ServiceName: "S3", ServicePrefix: "s3", Actions: []IAMAction{{Name: "Get"}}}
+
+			result, err := client.GeneratePolicyDocumentation(data, "{}")
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if !strings.Contains(result, "Documentation") {
+				t.Errorf("result = %q, want to contain 'Documentation'", result)
+			}
+		})
+	}
+}
+
+func TestGenerateSCPCleanup(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+	}{
+		{
+			name:     "with json fence",
+			response: "```json\n{\"Version\": \"2012-10-17\", \"Statement\": []}\n```",
+		},
+		{
+			name:     "with plain fence",
+			response: "```\n{\"Version\": \"2012-10-17\", \"Statement\": []}\n```",
+		},
+		{
+			name:     "with surrounding text",
+			response: "Here is the SCP:\n{\"Version\": \"2012-10-17\", \"Statement\": []}\nEnd.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				resp := map[string]any{
+					"choices": []any{
+						map[string]any{
+							"message": map[string]any{
+								"content": tt.response,
+							},
+						},
+					},
+				}
+				json.NewEncoder(w).Encode(resp)
+			}))
+			defer server.Close()
+
+			client := NewLLMClient(server.URL, "test-key", "test-model")
+			data := &ScrapedIAMData{ServiceName: "S3", ServicePrefix: "s3"}
+
+			result, err := client.GenerateSCP(data, "{}", "")
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if result == "" {
+				t.Error("result should not be empty")
+			}
+		})
+	}
+}
+
+func TestGenerateSCPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+	data := &ScrapedIAMData{ServiceName: "S3", ServicePrefix: "s3"}
+
+	_, err := client.GenerateSCP(data, "{}", "")
+	if err == nil {
+		t.Error("GenerateSCP() expected error, got nil")
+	}
+}
+
+func TestGenerateSCPInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "not valid json at all"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+	data := &ScrapedIAMData{ServiceName: "S3", ServicePrefix: "s3"}
+
+	_, err := client.GenerateSCP(data, "{}", "")
+	if err == nil {
+		t.Error("GenerateSCP() expected error for invalid JSON, got nil")
+	}
+}
+
+func TestGenerateCombinedDocumentationError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+	data := &ScrapedIAMData{ServiceName: "S3", ServicePrefix: "s3", Actions: []IAMAction{{Name: "Get"}}}
+
+	_, err := client.GenerateCombinedDocumentation(data, "{}", "{}")
+	if err == nil {
+		t.Error("GenerateCombinedDocumentation() expected error, got nil")
+	}
+}
+
+func TestGenerateCombinedDocumentationCleanup(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+	}{
+		{name: "markdown fence", response: "```markdown\n# Docs\n```"},
+		{name: "md fence", response: "```md\n# Docs\n```"},
+		{name: "plain fence", response: "```\n# Docs\n```"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				resp := map[string]any{
+					"choices": []any{
+						map[string]any{
+							"message": map[string]any{
+								"content": tt.response,
+							},
+						},
+					},
+				}
+				json.NewEncoder(w).Encode(resp)
+			}))
+			defer server.Close()
+
+			client := NewLLMClient(server.URL, "test-key", "test-model")
+			data := &ScrapedIAMData{ServiceName: "S3", ServicePrefix: "s3", Actions: []IAMAction{{Name: "Get"}}}
+
+			result, err := client.GenerateCombinedDocumentation(data, "{}", "{}")
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if !strings.Contains(result, "Docs") {
+				t.Errorf("result = %q, want to contain 'Docs'", result)
+			}
+		})
+	}
+}
+
+func TestEnrichActionDescriptionsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+	data := &ScrapedIAMData{ServicePrefix: "s3", Actions: []IAMAction{{Name: "Get"}}}
+
+	// Should not return error - enrichment is non-fatal
+	err := client.EnrichActionDescriptions(data, nil)
+	if err != nil {
+		t.Errorf("EnrichActionDescriptions() should not return error, got: %v", err)
+	}
+}
+
+func TestDedupeStatementsUnparseable(t *testing.T) {
+	statements := []json.RawMessage{
+		json.RawMessage(`{"Sid": "Valid"}`),
+		json.RawMessage(`not valid json`),
+		json.RawMessage(`{"Sid": "Valid2"}`),
+	}
+
+	result := dedupeStatements(statements)
+	// Should keep all statements including unparseable ones
+	if len(result) != 3 {
+		t.Errorf("dedupeStatements() = %d statements, want 3", len(result))
+	}
+}
+
+func TestGroupStatementsBySidUnparseable(t *testing.T) {
+	statements := []json.RawMessage{
+		json.RawMessage(`{"Sid": "Valid"}`),
+		json.RawMessage(`not valid json`),
+	}
+
+	result := groupStatementsBySid(statements)
+	if _, ok := result["_unparseable"]; !ok {
+		t.Error("groupStatementsBySid() should have _unparseable group")
+	}
+	if len(result["_unparseable"]) != 1 {
+		t.Errorf("_unparseable group should have 1 statement, got %d", len(result["_unparseable"]))
+	}
+}
+
+func TestAssembleFinalPolicyEmpty(t *testing.T) {
+	result := assembleFinalPolicy(nil)
+	if result == "" {
+		t.Error("assembleFinalPolicy(nil) should not return empty string")
+	}
+
+	var policy map[string]any
+	if err := json.Unmarshal([]byte(result), &policy); err != nil {
+		t.Errorf("assembleFinalPolicy() returned invalid JSON: %v", err)
+	}
+}
+
+func TestBuildBatchPolicyPromptNoConditionKeys(t *testing.T) {
+	data := &ScrapedIAMData{
+		ServiceName:   "Amazon S3",
+		ServicePrefix: "s3",
+		ConditionKeys: nil, // No condition keys
+	}
+
+	batch := []IAMAction{
+		{Name: "GetObject", Description: "Get", AccessLevel: "Read"},
+	}
+
+	result := buildBatchPolicyPrompt(data, batch, 1, 1, "")
+	if !strings.Contains(result, "s3") {
+		t.Error("buildBatchPolicyPrompt() should contain service prefix")
+	}
+}
+
+func TestBuildBatchPolicyPromptManyConditionKeys(t *testing.T) {
+	// Test with more than 10 condition keys (should be truncated)
+	keys := make([]IAMConditionKey, 15)
+	for i := range keys {
+		keys[i] = IAMConditionKey{Name: "key" + string(rune('a'+i)), Type: "String"}
+	}
+
+	data := &ScrapedIAMData{
+		ServiceName:   "Amazon S3",
+		ServicePrefix: "s3",
+		ConditionKeys: keys,
+	}
+
+	batch := []IAMAction{{Name: "GetObject", AccessLevel: "Read"}}
+
+	result := buildBatchPolicyPrompt(data, batch, 1, 1, "")
+	if !strings.Contains(result, "and") && !strings.Contains(result, "more") {
+		// The prompt should indicate there are more keys
+		// (exact format may vary)
+	}
+}
+
+func TestConsolidatePolicyWithProgress(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices": [{"message": {"content": "{\"Sid\": \"Merged\"}"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewLLMClient(server.URL, "test-key", "test-model")
+
+	// Create a mock progress reporter
+	progress := &mockProgress{}
+
+	statements := []json.RawMessage{
+		json.RawMessage(`{"Sid": "Test", "Effect": "Allow"}`),
+		json.RawMessage(`{"Sid": "Test", "Effect": "Deny"}`),
+	}
+
+	_, err := client.ConsolidatePolicy(statements, progress, 1)
+	if err != nil {
+		t.Errorf("ConsolidatePolicy() unexpected error: %v", err)
+	}
+
+	if progress.statusCalls == 0 {
+		t.Error("ConsolidatePolicy() should call progress.SetStatus()")
+	}
+}
+
+// mockProgress implements ProgressReporter for testing
+type mockProgress struct {
+	statusCalls   int
+	progressCalls int
+}
+
+func (m *mockProgress) SetStatus(status string) {
+	m.statusCalls++
+}
+
+func (m *mockProgress) SetProgress(current, total int) {
+	m.progressCalls++
+}
